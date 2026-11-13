@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Intraday condition explorer</title>
+<style>
+:root{color-scheme:light;--bg:#f4f3f0;--surface:#fcfcfb;--line:#e2e0da;--ink:#0b0b0b;--ink2:#52514e;--ink3:#8a8983;
+--up:#2a78d6;--down:#e34948;--flat:#b9b7b0;--up-rgb:42,120,214;--down-rgb:227,73,72;--mid:#f0efec}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#111110;--surface:#1a1a19;--line:#32322f;--ink:#f0efec;--ink2:#c3c2b7;--ink3:#8d8c84;
+--up:#3987e5;--down:#e66767;--flat:#5c5b56;--up-rgb:57,135,229;--down-rgb:230,103,103;--mid:#383835}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:14px 12px 60px}
+h1{font-size:19px;margin:6px 0 2px} h2{font-size:15px;margin:0 0 2px} .sub{color:var(--ink2);font-size:13px;margin:0 0 10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+label{display:block;font-size:12px;color:var(--ink2);margin-bottom:3px}
+select,input{width:100%;font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:10px 0}
+.tile{border:1px solid var(--line);border-radius:10px;padding:10px}
+.tile b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.tile span{font-size:12px;color:var(--ink2)}
+.verdict{font-size:14px;margin:8px 0 0}.warn{color:var(--ink);background:rgba(250,178,25,.18);border-radius:8px;padding:8px 10px;font-size:13px;margin-top:8px}
+.split{display:flex;height:14px;border-radius:4px;overflow:hidden;gap:2px;margin:4px 0}.split i{display:block;height:100%}
+.splitrow{font-size:12px;color:var(--ink2);margin-top:8px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);flex-wrap:wrap;margin:6px 0}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.cond{border-top:1px solid var(--line);padding:12px 0}.cond:first-of-type{border-top:0}
+.cond .hd{display:flex;gap:10px;align-items:end;justify-content:space-between;flex-wrap:wrap}
+.cond .hd div:first-child{flex:1 1 180px}.cond .hd select{flex:1 1 170px;width:auto}
+.cond small{color:var(--ink3);font-size:12px;display:block}
+.brow{display:grid;grid-template-columns:minmax(96px,34%) 1fr 92px;gap:8px;align-items:center;font-size:12px;padding:3px 4px;border-radius:6px;cursor:pointer;font-variant-numeric:tabular-nums}
+.brow:hover{background:var(--bg)}.brow.sel{outline:2px solid var(--ink);outline-offset:-1px}
+.brow .lab{color:var(--ink2)}.brow .val{text-align:right;color:var(--ink)}.brow .val em{color:var(--ink3);font-style:normal}
+.track{position:relative;height:14px}.track .axis{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--ink3)}
+.track .bar{position:absolute;top:1px;height:12px}.track .bar.up{background:var(--up);border-radius:0 4px 4px 0}.track .bar.down{background:var(--down);border-radius:4px 0 0 4px}
+.track .ci{position:absolute;top:6px;height:2px;background:var(--ink);opacity:.55}
+.track .base{position:absolute;top:-2px;bottom:-2px;width:0;border-left:2px dotted var(--ink2)}
+.axisnote{display:grid;grid-template-columns:minmax(96px,34%) 1fr 92px;gap:8px;font-size:11px;color:var(--ink3);padding:0 4px}.axisnote div{display:flex;justify-content:space-between}
+table{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+th,td{padding:5px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}th{color:var(--ink2);font-weight:500}td:first-child,th:first-child{text-align:left}
+.heat td{border:2px solid var(--surface);cursor:pointer;text-align:center}.heat td:first-child{cursor:default;color:var(--ink2);text-align:left}.heat td.cur{outline:2px solid var(--ink);outline-offset:-2px}
+svg{display:block;width:100%;height:auto}svg text{fill:var(--ink2);font-size:11px}
+#tip{position:fixed;z-index:9;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12px;padding:6px 8px;border-radius:6px;max-width:240px;display:none;white-space:pre-line}
+.note{font-size:12px;color:var(--ink2)}.ok{color:var(--ink)}.no{color:var(--ink3)}
+button{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+details summary{cursor:pointer;font-weight:600}
+</style></head><body><main>
+<h1>Intraday condition explorer</h1>
+<p class="sub" id="meta">Loading…</p>
+
+<div class="card"><div class="grid">
+<div><label for="sym">Stock</label><select id="sym"></select></div>
+<div><label for="tk">Decision time</label><select id="tk"></select></div>
+<div><label for="hz">What happens over the next</label><select id="hz"></select></div>
+<div><label for="wd">Weekday</label><select id="wd"><option value="-1">All days</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option></select></div>
+<div><label for="y0">From year</label><select id="y0"></select></div>
+<div><label for="y1">To year</label><select id="y1"></select></div>
+<div><label for="nbk">Buckets per condition</label><select id="nbk"><option>3</option><option selected>5</option><option>10</option></select></div>
+<div><label for="cap">Skip days with gap beyond ±%</label><input id="cap" type="number" value="20" min="1" step="1"></div>
+</div></div>
+
+<div class="card"><h2 id="resT">Result</h2><p class="sub" id="resS"></p>
+<div class="tiles" id="tiles"></div>
+<div class="legend"><span><i style="background:var(--up)"></i>Up</span><span><i style="background:var(--flat)"></i>Flat</span><span><i style="background:var(--down)"></i>Down</span></div>
+<div id="splits"></div><p class="verdict" id="verdict"></p><div id="warn"></div></div>
+
+<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div><h2>Conditions at the decision time</h2>
+<p class="sub">Each row shows how often the stock went up when that condition held, among days passing your other selections. Tap a row to apply it.</p></div><button id="clr">Clear</button></div>
+<div id="conds"></div></div>
+
+<div class="card"><h2>Average path through the day</h2><p class="sub" id="pathS"></p><div id="path"></div></div>
+<div class="card"><h2>Spread of outcomes</h2><p class="sub" id="histS"></p><div id="hist"></div></div>
+<div class="card"><h2>Does it hold year by year?</h2><p class="sub">Up share on matching days, split by year. A pattern that flips sign between years is probably noise.</p><div id="years"></div></div>
+<div class="card"><h2>Weekday × time of day</h2><p class="sub" id="heatS"></p><div id="heat" style="overflow-x:auto"></div></div>
+<div class="card"><h2>Most recent matching days</h2><div id="recent" style="overflow-x:auto"></div></div>
+<div class="card"><details><summary>What the data contains</summary><div id="inv" class="note" style="margin-top:10px"></div></details></div>
+<p class="note">Descriptive statistics of past prices, before brokerage, taxes and slippage. Not a forecast and not investment advice.</p>
+</main><div id="tip"></div>
+<script></script>
+<script>
+"use strict";
+const $=s=>document.querySelector(s), INL=window.__INLINE__||null;
+let MAN=null, BENCH=null, S={sym:null,data:null,k:0,h:3,wd:-1,y0:0,y1:9999,nbk:5,cap:20,conds:{}}, R=null;
+const cache={};
+const mm=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const sgn=(x,d=2)=>(x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(d);
+const pc0=x=>isFinite(x)?x.toFixed(0)+'%':'–';
+const dstr=d=>{const s=String(d);return s.slice(6)+'-'+s.slice(4,6)+'-'+s.slice(0,4)};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function getJSON(p){const r=await fetch(p);if(!r.ok)throw new Error(p+' '+r.status);return r.json()}
+async function load(sym){
+  if(cache[sym])return cache[sym];
+  const info=MAN.symbols.find(s=>s.sym===sym);
+  const j=INL?INL.data[sym]:await getJSON('data/'+info.json);
+  const n=j.days.length, nb=j.nb, N=n*nb;
+  const D={sym, n, nb, freq:j.freq, start:j.start, end:j.end, hasVol:j.hasVol, days:j.days,
+    pc:Float64Array.from(j.pc,x=>x/100), o:Float64Array.from(j.o,x=>x/100), pr:j.pr.map(x=>x==null?NaN:x),
+    C:new Float64Array(N), H:new Float64Array(N), L:new Float64Array(N), CV:null, A:null, idx:new Map()};
+  for(let i=0;i<N;i++){const c=j.c[i]/100;D.C[i]=c;D.H[i]=c+j.hd[i]/100;D.L[i]=c-j.ld[i]/100}
+  if(j.hasVol){D.CV=new Float64Array(N);D.A=new Float64Array(N);
+    for(let d=0;d<n;d++){let s=0;for(let b=0;b<nb;b++){const i=d*nb+b;s+=j.v[i];D.CV[i]=s;D.A[i]=D.C[i]+j.a[i]/100}}}
+  D.wd=j.days.map(x=>new Date(Date.UTC(Math.floor(x/1e4),Math.floor(x/100)%100-1,x%100)).getUTCDay());
+  D.yr=j.days.map(x=>Math.floor(x/1e4));
+  j.days.forEach((x,i)=>D.idx.set(x,i));
+  return cache[sym]=D;
+}
+const FEATS=()=>[
+ {id:'gap',name:'Gap at open',d:'Open vs previous close',u:'%'},
+ {id:'chg',name:'Change vs previous close',d:'Last price vs previous close',u:'%'},
+ {id:'sinceOpen',name:'Move since open',d:'Last price vs today’s open',u:'%'},
+ {id:'vsAvg',name:'Last price vs average trade price',d:'Average trade price = volume-weighted price so far today',u:'%',vol:1},
+ {id:'relVol',name:'Volume so far vs usual',d:'Today’s volume to this time ÷ average of the previous 20 sessions to the same time',u:'x',vol:1},
+ {id:'rangePos',name:'Position in day’s range',d:'0 = at day low, 100 = at day high',u:'p'},
+ {id:'rangeSoFar',name:'Day’s range so far',d:'(High − low) as % of previous close',u:'%+'},
+ {id:'mom',name:'Last 15 minutes',d:'Price change over the 15 minutes before the decision time',u:'%'},
+ {id:'prevRet',name:'Previous day’s return',d:'Previous session close-to-close change',u:'%'},
+ {id:'bench',name:(MAN.benchmark||'Index')+' change vs previous close',d:'Market index at the same time',u:'%',bench:1},
+ {id:'rel',name:'Stock minus '+(MAN.benchmark||'index'),d:'Stock change vs previous close minus index change',u:'%',bench:1},
+].filter(f=>(!f.vol||S.data.hasVol)&&(!f.bench||(BENCH&&S.sym!==MAN.benchmark)));
+
+function fmtV(v,u){return u==='x'?v.toFixed(2)+'×':u==='p'?v.toFixed(0):u==='%+'?v.toFixed(2)+'%':sgn(v)+'%'}
+function quant(sorted,q){const p=(sorted.length-1)*q,a=Math.floor(p),b=Math.ceil(p);return sorted[a]+(sorted[b]-sorted[a])*(p-a)}
+function wilson(k,n){if(!n)return[NaN,NaN];const z=1.96,p=k/n,d=1+z*z/n,c=p+z*z/(2*n),w=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[(c-w)/d*100,(c+w)/d*100]}
+function stats(list,ret){let up=0,dn=0,fl=0,s=0;const v=[];for(const d of list){const r=ret[d];v.push(r);s+=r;if(r>0)up++;else if(r<0)dn++;else fl++}
+  v.sort((a,b)=>a-b);const n=list.length,mv=up+dn;return{n,up,dn,fl,mean:n?s/n:NaN,med:n?quant(v,.5):NaN,ups:mv?up/mv*100:NaN,ci:wilson(up,mv),mv,v}}
+
+function compute(){
+  const D=S.data,nb=D.nb,n=D.n,j=S.k,jh=S.h==='close'?nb-1:j+S.h,m=Math.ceil(15/D.freq),feats=FEATS();
+  const F={};feats.forEach(f=>F[f.id]=new Float64Array(n).fill(NaN));
+  const ret=new Float64Array(n).fill(NaN),B=BENCH;
+  let jb=-1;if(B&&F.bench){const t=D.start+(j+1)*D.freq,q=(t-B.start)/B.freq-1;if(Number.isInteger(q)&&q>=0&&q<B.nb)jb=q}
+  for(let d=0;d<n;d++){const b0=d*nb,c=D.C[b0+j],pc=D.pc[d],o=D.o[d];let hi=-Infinity,lo=Infinity;
+    for(let i=0;i<=j;i++){if(D.H[b0+i]>hi)hi=D.H[b0+i];if(D.L[b0+i]<lo)lo=D.L[b0+i]}
+    F.gap[d]=(o/pc-1)*100;F.chg[d]=(c/pc-1)*100;F.sinceOpen[d]=(c/o-1)*100;
+    if(hi>lo)F.rangePos[d]=(c-lo)/(hi-lo)*100;F.rangeSoFar[d]=(hi-lo)/pc*100;
+    if(j>=m)F.mom[d]=(c/D.C[b0+j-m]-1)*100;else if(j===m-1)F.mom[d]=(c/o-1)*100;F.prevRet[d]=D.pr[d];
+    if(F.vsAvg){const a=D.A[b0+j];if(a>0&&D.CV[b0+j]>0)F.vsAvg[d]=(c/a-1)*100;
+      if(d>=20){let s=0;for(let q=d-20;q<d;q++)s+=D.CV[q*nb+j];if(s>0)F.relVol[d]=D.CV[b0+j]/(s/20)}}
+    if(jb>=0){const bd=B.idx.get(D.days[d]);if(bd!==undefined){const bc=(B.C[bd*B.nb+jb]/B.pc[bd]-1)*100;F.bench[d]=bc;F.rel[d]=F.chg[d]-bc}}
+    if(jh<nb&&jh>j)ret[d]=(D.C[b0+jh]/c-1)*100;
+  }
+  const base=[];for(let d=0;d<n;d++){if(!isFinite(ret[d]))continue;if(D.yr[d]<S.y0||D.yr[d]>S.y1)continue;
+    if(S.wd>=0&&D.wd[d]!==S.wd)continue;if(Math.abs(F.gap[d])>S.cap)continue;base.push(d)}
+  // bucket edges from the data itself (equal-count buckets)
+  const edges={},bk={};
+  for(const f of feats){const v=[];for(const d of base)if(isFinite(F[f.id][d]))v.push(F[f.id][d]);v.sort((a,b)=>a-b);
+    let e=[];if(v.length>=S.nbk*5)for(let q=1;q<S.nbk;q++)e.push(quant(v,q/S.nbk));
+    e=e.filter((x,i)=>i===0||x>e[i-1]);edges[f.id]=e;
+    const a=new Int8Array(n).fill(-1);for(const d of base){const x=F[f.id][d];if(!isFinite(x))continue;let b=0;while(b<e.length&&x>e[b])b++;a[d]=b}bk[f.id]=a}
+  for(const id in S.conds)if(!edges[id]||S.conds[id]>edges[id].length)delete S.conds[id];
+  const pass=(d,skip)=>{for(const id in S.conds){if(id===skip)continue;if(bk[id][d]!==S.conds[id])return false}return true};
+  const match=base.filter(d=>pass(d,null));
+  R={D,F,ret,base,match,edges,bk,pass,feats,j,jh};
+}
+function bLabel(f,e,b){const u=f.u,nbk=e.length+1;if(!e.length)return 'all';
+  if(b===0)return '≤ '+fmtV(e[0],u);if(b===nbk-1)return '> '+fmtV(e[b-1],u);return fmtV(e[b-1],u)+' to '+fmtV(e[b],u)}
+
+function divRow(label,st,baseUps,dom,attrs){
+  const x=v=>50+Math.max(-50,Math.min(50,(v-50)/dom*50));
+  let bar='',ci='';
+  if(st.mv){const u=st.ups,a=Math.min(50,x(u)),w=Math.abs(x(u)-50);bar=`<div class="bar ${u>=50?'up':'down'}" style="left:${a}%;width:${Math.max(w,.6)}%"></div>`;
+    ci=`<div class="ci" style="left:${x(st.ci[0])}%;width:${x(st.ci[1])-x(st.ci[0])}%"></div>`}
+  const tip=`${label}\nUp ${st.up} · Down ${st.dn} · Flat ${st.fl}\nUp share ${pc0(st.ups)} (95% range ${pc0(st.ci[0])}–${pc0(st.ci[1])})\nAverage move ${isFinite(st.mean)?sgn(st.mean)+'%':'–'}`;
+  return `<div class="brow ${attrs.sel?'sel':''}" ${attrs.data||''} data-tip="${esc(tip)}"><div class="lab">${esc(label)}</div><div class="track"><div class="axis"></div><div class="base" style="left:${x(baseUps)}%"></div>${bar}${ci}</div><div class="val">${pc0(st.ups)} <em>n=${st.n}</em></div></div>`;
+}
+const axisNote=dom=>`<div class="axisnote"><span></span><div><span>${(50-dom).toFixed(0)}%</span><span>50%</span><span>${(50+dom).toFixed(0)}%</span></div><span></span></div>`;
+function domOf(arr){let m=10;for(const s of arr)if(s.mv>=10)m=Math.max(m,Math.abs(s.ups-50));return Math.min(50,Math.ceil(m/5)*5)}
+
+function render(){
+  compute();const {D,F,ret,base,match,edges,bk,pass,feats,j,jh}=R;
+  const tDec=mm(D.start+(j+1)*D.freq), hLab=S.h==='close'?'until the close':(S.h*D.freq)+' minutes';
+  const sm=stats(match,ret), sb=stats(base,ret), nC=Object.keys(S.conds).length;
+  $('#resT').textContent=`${D.sym} at ${tDec}: next ${hLab}`;
+  $('#resS').textContent=nC?`${sm.n} of ${sb.n} sessions match your ${nC} condition${nC>1?'s':''}.`:`All ${sb.n} sessions in range. Pick conditions below to narrow down.`;
+  $('#tiles').innerHTML=[[pc0(sm.ups),'went up (of days that moved)'],[isFinite(sm.mean)?sgn(sm.mean)+'%':'–','average move'],[isFinite(sm.med)?sgn(sm.med)+'%':'–','median move'],[sm.n,'sessions']].map(t=>`<div class="tile"><b>${t[0]}</b><span>${t[1]}</span></div>`).join('');
+  const split=(lab,s)=>s.n?`<div class="splitrow">${lab}: up ${s.up}, flat ${s.fl}, down ${s.dn}</div><div class="split" data-tip="${lab}\nUp ${s.up} · Flat ${s.fl} · Down ${s.dn}"><i style="width:${s.up/s.n*100}%;background:var(--up)"></i><i style="width:${s.fl/s.n*100}%;background:var(--flat)"></i><i style="width:${s.dn/s.n*100}%;background:var(--down)"></i></div>`:'';
+  $('#splits').innerHTML=split('Matching sessions',sm)+(nC?split('All sessions at this time',sb):'');
+  let v='';if(sm.mv){v=`Up share ${pc0(sm.ups)}, 95% range ${pc0(sm.ci[0])}–${pc0(sm.ci[1])}. All sessions at this time: ${pc0(sb.ups)}. `;
+    if(nC)v+=(sb.ups<sm.ci[0]||sb.ups>sm.ci[1])?'The all-sessions rate falls outside that range, so the conditions are associated with a different outcome in this sample.':'The all-sessions rate is inside that range, so this is not distinguishable from an ordinary session.';
+    else v+=(50<sm.ci[0]||50>sm.ci[1])?'That range excludes 50%.':'That range includes 50%, so there is no directional lean at this time by itself.'}
+  $('#verdict').textContent=v;
+  $('#warn').innerHTML=(sm.n<30?`<div class="warn">Only ${sm.n} sessions match. Too few to read a pattern from.</div>`:'')+(nC>=3?`<div class="warn">With ${nC} conditions stacked, some combination will look good by chance. Check the year-by-year chart.</div>`:'');
+
+  // conditions
+  let h='';for(const f of feats){const e=edges[f.id],nb=e.length+1,cur=S.conds[f.id];const rows=[];
+    for(let b=0;b<nb;b++){const list=[];for(const d of base)if(bk[f.id][d]===b&&pass(d,f.id))list.push(d);rows.push(stats(list,ret))}
+    const dom=domOf(rows);
+    h+=`<div class="cond"><div class="hd"><div><b>${esc(f.name)}</b><small>${esc(f.d)}</small></div><select data-f="${f.id}"><option value="-1">Any</option>${rows.map((s,b)=>`<option value="${b}" ${cur===b?'selected':''}>${esc(bLabel(f,e,b))}</option>`).join('')}</select></div>`;
+    if(!e.length)h+=`<small>Not available at this time or too few sessions.</small>`;
+    else h+=rows.map((s,b)=>divRow(bLabel(f,e,b),s,sb.ups,dom,{sel:cur===b,data:`data-f="${f.id}" data-b="${b}"`})).join('')+axisNote(dom);
+    h+='</div>'}
+  $('#conds').innerHTML=h;
+
+  // average path
+  const nb=D.nb,path=list=>{const mean=new Float64Array(nb),q1=new Float64Array(nb),q3=new Float64Array(nb);if(!list.length)return null;
+    for(let b=0;b<nb;b++){const v=[];for(const d of list)v.push((D.C[d*nb+b]/D.C[d*nb+j]-1)*100);v.sort((x,y)=>x-y);let s=0;for(const x of v)s+=x;mean[b]=s/v.length;q1[b]=quant(v,.25);q3[b]=quant(v,.75)}return{mean,q1,q3}};
+  const pm=path(match),pb=path(base);
+  $('#pathS').textContent=`Price relative to the ${tDec} price, averaged over sessions. Shaded band: middle half of matching sessions. Left of the marker is what led up to it.`;
+  $('#path').innerHTML=pm?lineChart(D,pm,nC?pb:null,j):'<p class="note">No matching sessions.</p>';
+
+  // histogram
+  $('#histS').textContent=`Move over the next ${hLab} on each matching session.`;
+  $('#hist').innerHTML=sm.n?histChart(sm.v,sb.v):'<p class="note">No matching sessions.</p>';
+
+  // by year
+  const ys=[...new Set(match.map(d=>D.yr[d]))].sort(),yr=ys.map(y=>stats(match.filter(d=>D.yr[d]===y),ret)),yd=domOf(yr);
+  $('#years').innerHTML=ys.length?ys.map((y,i)=>divRow(String(y),yr[i],sb.ups,yd,{})).join('')+axisNote(yd)+'<p class="note">Dotted line: up share across all sessions at this time. Thin line: 95% range.</p>':'<p class="note">No matching sessions.</p>';
+
+  // weekday x time heat table (date range and gap filter only)
+  const step=Math.max(1,Math.round(15/D.freq)),hb=S.h==='close'?null:S.h;let ht='<table class="heat"><tr><th>Time</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>All</th></tr>';
+  for(let k=step-1;k<nb-1;k+=step){const kh=hb==null?nb-1:k+hb;if(kh>=nb||kh<=k)continue;const cnt=Array.from({length:6},()=>[0,0,0]);
+    for(let d=0;d<D.n;d++){if(D.yr[d]<S.y0||D.yr[d]>S.y1||Math.abs(F.gap[d])>S.cap)continue;const r=D.C[d*nb+kh]/D.C[d*nb+k]-1,w=D.wd[d];
+      const q=r>0?0:r<0?1:2;cnt[5][q]++;if(w>=1&&w<=5)cnt[w-1][q]++}
+    ht+=`<tr><td>${mm(D.start+(k+1)*D.freq)}</td>`+cnt.map((c,w)=>{const mv=c[0]+c[1],u=mv?c[0]/mv*100:NaN,a=isFinite(u)?Math.min(.75,Math.abs(u-50)/12*.75):0;
+      const cur=k===j&&(w===5?S.wd<0:S.wd===w+1);return `<td class="${cur?'cur':''}" data-k="${k}" data-w="${w===5?-1:w+1}" style="background:rgba(var(--${u>=50?'up':'down'}-rgb),${a.toFixed(2)})" data-tip="${mm(D.start+(k+1)*D.freq)} ${['Mon','Tue','Wed','Thu','Fri','All days'][w]}\nUp ${c[0]} · Down ${c[1]} · Flat ${c[2]}">${pc0(u)}</td>`}).join('')+'</tr>'}
+  $('#heatS').textContent=`Up share over the next ${hLab}, by weekday and time, for all sessions in the selected years (conditions above are not applied). Blue leans up, red leans down, colour saturates at ±12 points from 50%. Tap a cell to jump there.`;
+  $('#heat').innerHTML=ht+'</table>';
+
+  // recent
+  const rec=match.slice(-12).reverse();
+  $('#recent').innerHTML=rec.length?`<table><tr><th>Date</th><th>Prev close</th><th>Open</th><th>Price at ${tDec}</th><th>Gap</th><th>Next ${S.h==='close'?'to close':S.h*D.freq+'m'}</th></tr>`+rec.map(d=>`<tr><td>${dstr(D.days[d])}</td><td>${D.pc[d].toFixed(2)}</td><td>${D.o[d].toFixed(2)}</td><td>${D.C[d*nb+j].toFixed(2)}</td><td>${sgn(F.gap[d])}%</td><td>${sgn(ret[d])}%</td></tr>`).join('')+'</table>':'<p class="note">No matching sessions.</p>';
+}
+function lineChart(D,pm,pb,j){const W=340,H=190,l=50,r=8,t=10,b=24,nb=D.nb;let lo=Infinity,hi=-Infinity;
+  for(let i=0;i<nb;i++){lo=Math.min(lo,pm.q1[i],pb?pb.mean[i]:0);hi=Math.max(hi,pm.q3[i],pb?pb.mean[i]:0)}
+  const pad=(hi-lo)*.06||.1;lo-=pad;hi+=pad;const x=i=>l+(W-l-r)*i/(nb-1),y=v=>t+(H-t-b)*(1-(v-lo)/(hi-lo));
+  const ln=a=>Array.from(a,(v,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)).join('');
+  let band='M'+Array.from(pm.q3,(v,i)=>x(i).toFixed(1)+' '+y(v).toFixed(1)).join('L')+'L'+Array.from(pm.q1,(v,i)=>x(nb-1-i).toFixed(1)+' '+y(pm.q1[nb-1-i]).toFixed(1)).join('L')+'Z';
+  let g='';const tk=4;for(let i=0;i<=tk;i++){const v=lo+(hi-lo)*i/tk;g+=`<line x1="${l}" x2="${W-r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${l-4}" y="${y(v)+4}" text-anchor="end">${sgn(v,2)}%</text>`}
+  const hrs=[];for(let i=0;i<nb;i++){const m=D.start+(i+1)*D.freq;if(m%60===0)hrs.push(i)}
+  const xt=hrs.map(i=>`<text x="${x(i)}" y="${H-6}" text-anchor="middle">${mm(D.start+(i+1)*D.freq)}</text>`).join('');
+  let hit='';for(let i=0;i<nb;i++)hit+=`<rect x="${x(i)-2.2}" y="${t}" width="4.4" height="${H-t-b}" fill="transparent" data-tip="${mm(D.start+(i+1)*D.freq)}\nMatching avg ${sgn(pm.mean[i])}%\nMiddle half ${sgn(pm.q1[i])}% to ${sgn(pm.q3[i])}%${pb?'\nAll sessions avg '+sgn(pb.mean[i])+'%':''}"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Average intraday path">${g}<path d="${band}" fill="var(--ink)" opacity=".1"/><line x1="${l}" x2="${W-r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--ink3)"/><line x1="${x(j)}" x2="${x(j)}" y1="${t}" y2="${H-b}" stroke="var(--ink2)" stroke-dasharray="3 3"/>${pb?`<path d="${ln(pb.mean)}" fill="none" stroke="var(--ink3)" stroke-width="2" stroke-dasharray="5 4"/>`:''}<path d="${ln(pm.mean)}" fill="none" stroke="var(--ink)" stroke-width="2"/>${xt}${hit}</svg><div class="legend"><span><i style="background:var(--ink)"></i>Matching sessions (average)</span>${pb?'<span><i style="background:var(--ink3)"></i>All sessions (dashed)</span>':''}<span>Dashed vertical: decision time</span></div>`}
+function histChart(v,vb){const W=340,H=150,l=8,r=8,t=8,b=22,nbn=21;const sb=vb.map(Math.abs).sort((a,c)=>a-c);let lim=quant(sb,.98)||.1;
+  const cnt=new Array(nbn).fill(0);for(const x of v){let i=Math.floor((x+lim)/(2*lim)*nbn);i=Math.max(0,Math.min(nbn-1,i));cnt[i]++}
+  const mx=Math.max(...cnt),bw=(W-l-r)/nbn;let s='';cnt.forEach((c,i)=>{const a=-lim+2*lim*i/nbn,z=a+2*lim/nbn,hh=c/mx*(H-t-b),mid=i===(nbn-1)/2;
+    s+=`<rect x="${l+i*bw+1}" y="${H-b-hh}" width="${bw-2}" height="${hh}" rx="2" fill="var(--${mid?'flat':a<0?'down':'up'})" data-tip="${sgn(a)}% to ${sgn(z)}%${i===0?' and below':i===nbn-1?' and above':''}\n${c} sessions"/>`});
+  const xt=[-lim,-lim/2,0,lim/2,lim].map((q,i)=>`<text x="${l+(q+lim)/(2*lim)*(W-l-r)}" y="${H-6}" text-anchor="${i===0?'start':i===4?'end':'middle'}">${sgn(q)}%</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Histogram of outcomes">${s}<line x1="${l}" x2="${W-r}" y1="${H-b}" y2="${H-b}" stroke="var(--ink3)"/>${xt}</svg><p class="note">End bars include everything beyond ±${lim.toFixed(2)}% (the 98th percentile of all sessions).</p>`}
+
+function fillControls(){const D=S.data,nb=D.nb;const tk=$('#tk'),old=S.k;tk.innerHTML='';
+  for(let k=0;k<nb-1;k++)tk.insertAdjacentHTML('beforeend',`<option value="${k}">${mm(D.start+(k+1)*D.freq)}</option>`);
+  S.k=Math.min(old||Math.max(0,Math.round(15/D.freq)-1),nb-2);tk.value=S.k;
+  const hz=$('#hz'),oh=S.h;hz.innerHTML='';[5,15,30,60,120].filter(m=>m%D.freq===0).forEach(m=>hz.insertAdjacentHTML('beforeend',`<option value="${m/D.freq}">${m} minutes</option>`));
+  hz.insertAdjacentHTML('beforeend','<option value="close">until the close</option>');
+  S.h=oh==='close'?'close':([...hz.options].some(o=>o.value==String(oh))?oh:Math.round(15/D.freq));hz.value=S.h;
+  const ys=[...new Set(D.yr)];for(const id of['#y0','#y1']){$(id).innerHTML=ys.map(y=>`<option>${y}</option>`).join('')}
+  S.y0=ys[0];S.y1=ys[ys.length-1];$('#y0').value=S.y0;$('#y1').value=S.y1;
+  const i=MAN.symbols.find(s=>s.sym===D.sym);
+  $('#meta').textContent=`${D.sym}: ${D.n} sessions, ${dstr(i.from)} to ${dstr(i.to)}, ${D.freq}-minute bars, session ${mm(D.start)}–${mm(D.end+1)} (read from the data). Built ${MAN.generated}.`;
+}
+async function pick(sym){S.sym=sym;$('#meta').textContent='Loading '+sym+'…';S.data=await load(sym);
+  BENCH=MAN.benchmark?await load(MAN.benchmark):null;S.conds={};fillControls();render()}
+function inventory(){const m=MAN,q=m.quoteFields,one=m.symbols[0];
+  const yes=(a,b)=>`<tr><td class="ok">${a}</td><td style="text-align:left">${b}</td></tr>`;
+  let h='<table><tr><th>Quote-screen field</th><th style="text-align:left">In this data?</th></tr>';
+  h+=yes('Open, day high/low, last price','Yes: read from the open/high/low/close columns');
+  h+=yes('Previous close','Derived: last price of the previous session in the files (not the exchange’s official closing price)');
+  h+=yes('Volume',m.symbols.some(s=>s.hasVol)?'Yes: volume column':'No volume in these files');
+  h+=yes('Average trade price','Derived: volume-weighted average of 1-minute bars so far in the day');
+  for(const k in q)h+=`<tr><td class="${q[k].length?'ok':'no'}">${k}</td><td style="text-align:left">${q[k].length?'Columns found but not used: '+esc(q[k].join(', ')):'No such column in the files, so it cannot be used as a condition'}</td></tr>`;
+  h+='</table>';
+  h+=`<p>Columns used: ${esc(m.columnsUsed.join(', '))}.</p>`;
+  if(m.columnsUnused.length)h+=`<p>Other columns present but not used (${m.columnsUnused.length}): ${esc(m.columnsUnused.slice(0,80).join(', '))}${m.columnsUnused.length>80?'…':''}</p>`;
+  h+=`<p>${m.symbols.length} symbols. Source bar interval ${one.srcStep} minute(s). Sessions that start late or have under ${Math.round(m.minCoverage*100)}% of the usual bar count are dropped (for ${one.sym}: ${one.dropped}).</p>`;
+  if(m.errors.length)h+=`<p>Files skipped: ${esc(m.errors.map(e=>e.sym+' ('+e.error+')').join('; '))}</p>`;
+  $('#inv').innerHTML=h}
+async function init(){
+  try{MAN=INL?INL.manifest:await getJSON('data/manifest.json')}catch(e){$('#meta').textContent='Could not load data/manifest.json. Serve this folder over http (GitHub Pages or "python -m http.server"), not file://.';return}
+  $('#sym').innerHTML=MAN.symbols.map(s=>`<option>${esc(s.sym)}</option>`).join('');
+  const first=(MAN.symbols.find(s=>s.sym!==MAN.benchmark&&s.hasVol)||MAN.symbols[0]).sym;$('#sym').value=first;inventory();
+  $('#sym').onchange=e=>pick(e.target.value);
+  $('#tk').onchange=e=>{S.k=+e.target.value;render()};
+  $('#hz').onchange=e=>{S.h=e.target.value==='close'?'close':+e.target.value;render()};
+  $('#wd').onchange=e=>{S.wd=+e.target.value;render()};
+  $('#y0').onchange=e=>{S.y0=+e.target.value;render()};$('#y1').onchange=e=>{S.y1=+e.target.value;render()};
+  $('#nbk').onchange=e=>{S.nbk=+e.target.value;S.conds={};render()};
+  $('#cap').onchange=e=>{S.cap=+e.target.value||20;render()};
+  $('#clr').onclick=()=>{S.conds={};render()};
+  $('#conds').addEventListener('change',e=>{const f=e.target.dataset.f;if(!f)return;const b=+e.target.value;if(b<0)delete S.conds[f];else S.conds[f]=b;render()});
+  $('#conds').addEventListener('click',e=>{const r=e.target.closest('.brow');if(!r)return;const f=r.dataset.f,b=+r.dataset.b;if(S.conds[f]===b)delete S.conds[f];else S.conds[f]=b;render()});
+  $('#heat').addEventListener('click',e=>{const c=e.target.closest('td[data-k]');if(!c)return;S.k=+c.dataset.k;S.wd=+c.dataset.w;$('#tk').value=S.k;$('#wd').value=S.wd;render();window.scrollTo({top:0,behavior:'smooth'})});
+  const tip=$('#tip');const show=e=>{const el=e.target.closest&&e.target.closest('[data-tip]');if(!el){tip.style.display='none';return}
+    tip.textContent=el.dataset.tip;tip.style.display='block';const w=tip.offsetWidth,hh=tip.offsetHeight;
+    tip.style.left=Math.max(6,Math.min(innerWidth-w-6,e.clientX+12))+'px';tip.style.top=Math.max(6,e.clientY-hh-12)+'px'};
+  document.addEventListener('pointermove',show);document.addEventListener('pointerdown',show);
+  pick(first)}
+init();
+</script></body></html>
