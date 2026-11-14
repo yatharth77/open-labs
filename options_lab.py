@@ -288,6 +288,8 @@ def perf_stats(dates, rs):
         "profit_factor": float(wins.sum() / -losses.sum()) if losses.sum() < 0 else np.nan,
         "max_dd": float(dd.min()), "dd_text": "none", "recovery_text": "-",
         "underwater_text": "-", "eq": eq, "dd": dd,
+        "rec_exp": 0.0, "rec_days": 0.0, "recovered": True,
+        "uw_exp": 0.0, "uw_days": 0.0,
     }
     out["avg_over_std"] = out["avg"] / out["std"] if out["std"] and out["std"] > 0 else np.nan
     streak = best = 0
@@ -304,9 +306,15 @@ def perf_stats(dates, rs):
         rec = np.flatnonzero(eq[t + 1:] >= pk - 1e-9)
         if len(rec):
             r = t + 1 + int(rec[0])
-            out["recovery_text"] = (f"{r - t} expiries ({(dts[r] - dts[t]).days} days, "
+            out["rec_exp"], out["rec_days"] = float(r - t), float((dts[r] - dts[t]).days)
+            e_, d_ = r - t, (dts[r] - dts[t]).days
+            out["recovery_text"] = (f"{e_} expir{'y' if e_ == 1 else 'ies'} "
+                                    f"({d_} day{'' if d_ == 1 else 's'}, "
                                     f"by {dts[r].date().isoformat()})")
         else:
+            out["rec_exp"] = float(n - 1 - t)
+            out["rec_days"] = float((dts[-1] - dts[t]).days)
+            out["recovered"] = False
             out["recovery_text"] = f"not recovered by {dts[-1].date().isoformat()}"
         # longest stretch below a previous peak
         longest, start = (0, None, None), None
@@ -320,8 +328,10 @@ def perf_stats(dates, rs):
                 if i - start > longest[0]:
                     longest = (i - start, (b - a).days, i < n)
                 start = None
-        out["underwater_text"] = (f"{longest[0]} expiries ({longest[1]} days"
-                                  f"{'' if longest[2] else ', still below'})")
+        out["uw_exp"], out["uw_days"] = float(longest[0]), float(longest[1] or 0)
+        out["underwater_text"] = (
+            f"{longest[0]} expir{'y' if longest[0] == 1 else 'ies'} ({longest[1]} days"
+            f"{'' if longest[2] else ', still below'})")
     return out
 
 
@@ -982,36 +992,200 @@ def build_be_section(sym, B, n_sessions, be_skips, cfg):
 
     # ---- stop-loss grid
     sls = [f"{v:g}" for v in cfg.be_sl_grid] + ["none"]
+
+    def lab(sl):
+        return "no stop-loss" if sl == "none" else f"{sl} pts"
+
+    ylab = [lab(v) for v in sls]
     grid = {}
     for sl in sls:
         for x in bes:
             d = mid[(mid.sl == sl) & (mid["mode"] == cfg.sl_mode) & (mid.breakeven == x)]
             grid[(sl, x)] = stats(d) if len(d) else {}
-    z = np.array([[grid[(sl, x)].get("avg", np.nan) for x in bes] for sl in sls])
-    limv = float(np.nanmax(np.abs(z))) if np.isfinite(z).any() else 1.0
-    cd = [[[grid[(sl, x)].get(k, np.nan) for k in ("total", "max_dd", "win_rate", "worst", "sl_rate")]
-           for x in bes] for sl in sls]
-    figs.append(("Average profit per expiry (₹) by stop-loss and break-even",
-                 "Stop-loss in points above each option's entry price. Blue made money on average, "
-                 "red lost. Hover for total, maximum drawdown, win rate and worst expiry.",
-                 [{"type": "heatmap", "x": [f"{x:g}%" for x in bes],
-                   "y": [("no stop-loss" if v == "none" else f"{v} pts") for v in sls],
-                   "z": np.where(np.isnan(z), None, np.round(z, 0)).tolist(),
-                   "text": [["" if np.isnan(v) else fmt_rs(v) for v in r] for r in z],
-                   "texttemplate": "%{text}", "customdata": cd,
-                   "zmin": -limv, "zmax": limv, "xgap": 2, "ygap": 2,
-                   "colorscale": [[0, "#d03b3b"], [0.5, "#f0efec"], [1, "#2a78d6"]],
-                   "colorbar": {"title": "₹/expiry", "thickness": 10},
-                   "hovertemplate": "%{x} break-even, %{y}<br>Avg %{text}<br>Total ₹%{customdata[0]:,.0f}"
-                                    "<br>Max drawdown ₹%{customdata[1]:,.0f}<br>Win rate "
-                                    "%{customdata[2]:.0f}%, stop-loss on %{customdata[4]:.0f}%"
-                                    "<br>Worst expiry ₹%{customdata[3]:,.0f}<extra></extra>"}],
-                 {"xaxis": {"type": "category", "title": "Break-even distance"},
-                  "yaxis": {"autorange": "reversed", "type": "category"}, "margin": {"l": 100},
-                  "_height": 420}))
 
-    def lab(sl):
-        return "no stop-loss" if sl == "none" else f"{sl} pts"
+    def mat(key):
+        return np.array([[grid[(sl, x)].get(key, np.nan) for x in bes] for sl in sls], float)
+
+    rec_ok = np.array([[grid[(sl, x)].get("recovered", True) for x in bes] for sl in sls], bool)
+    hover_extra = ("<br>Total %{customdata[0]}<br>Max drawdown %{customdata[1]}"
+                   "<br>Recovery: %{customdata[2]}<br>Win rate %{customdata[3]:.0f}%, "
+                   "stop-loss on %{customdata[4]:.0f}% of expiries<extra></extra>")
+    cd = [[[fmt_rs(grid[(sl, x)].get("total", np.nan)),
+            fmt_rs(grid[(sl, x)].get("max_dd", np.nan)),
+            grid[(sl, x)].get("recovery_text", "-"),
+            grid[(sl, x)].get("win_rate", np.nan),
+            grid[(sl, x)].get("sl_rate", np.nan)] for x in bes] for sl in sls]
+
+    MEASURES = [
+        ("avg", "Average profit per expiry (₹)", "rs", "div"),
+        ("max_dd", "Maximum drawdown (₹)", "rs", "bad"),
+        ("rec_exp", "Expiries taken to recover from it", "plus", "bad_lo"),
+        ("rec_days", "Calendar days taken to recover", "plus", "bad_lo"),
+        ("uw_exp", "Longest stretch below a previous peak (expiries)", "int", "bad_lo"),
+        ("total", "Total profit (₹)", "rs", "div"),
+        ("ratio", "Total profit ÷ maximum drawdown", "x1", "good"),
+        ("win_rate", "Winning expiries (%)", "pct0", "good"),
+        ("sl_rate", "Expiries with a stop-loss (%)", "pct0", "bad_lo"),
+        ("profit_factor", "Profit factor (gross wins ÷ gross losses)", "x1", "good"),
+        ("worst", "Worst single expiry (₹)", "rs", "bad"),
+        ("avg_over_std", "Average ÷ standard deviation per expiry", "x2", "good"),
+    ]
+    RED = [[0, "#f0efec"], [1, "#d03b3b"]]
+    BLUE = [[0, "#f0efec"], [1, "#2a78d6"]]
+    traces, buttons = [], []
+    for mi, (key, label, fmt, kind) in enumerate(MEASURES):
+        if key == "ratio":
+            z = np.where(mat("max_dd") < 0, mat("total") / -mat("max_dd"), np.nan)
+        else:
+            z = mat(key)
+        fin = z[np.isfinite(z)]
+        if kind == "div":
+            limv = float(np.nanmax(np.abs(fin))) if fin.size else 1.0
+            zmin, zmax = -limv, limv
+            scale = [[0, "#d03b3b"], [0.5, "#f0efec"], [1, "#2a78d6"]]
+        elif kind == "bad":          # negative numbers: deeper red is worse
+            zmin, zmax, scale = (float(fin.min()) if fin.size else -1.0), 0.0, \
+                [[0, "#d03b3b"], [1, "#f0efec"]]
+        elif kind == "bad_lo":       # positive numbers where lower is better
+            zmin, zmax, scale = 0.0, (float(fin.max()) if fin.size else 1.0), RED
+        else:
+            zmin, zmax, scale = 0.0, (float(fin.max()) if fin.size else 1.0), BLUE
+        txt = []
+        for i in range(z.shape[0]):
+            row = []
+            for j in range(z.shape[1]):
+                v = z[i, j]
+                if not np.isfinite(v):
+                    row.append("")
+                elif fmt == "rs":
+                    row.append(fmt_rs(v))
+                elif fmt == "pct0":
+                    row.append(f"{v:.0f}%")
+                elif fmt == "x1":
+                    row.append(f"{v:.1f}")
+                elif fmt == "x2":
+                    row.append(f"{v:.2f}")
+                elif fmt == "plus":
+                    row.append(f"{v:.0f}" + ("" if rec_ok[i, j] else "+"))
+                else:
+                    row.append(f"{v:.0f}")
+            txt.append(row)
+        traces.append({
+            "type": "heatmap", "x": [f"{x:g}%" for x in bes], "y": ylab, "visible": mi == 0,
+            "z": np.where(np.isfinite(z), np.round(z, 3), None).tolist(),
+            "text": txt, "texttemplate": "%{text}", "customdata": cd,
+            "zmin": zmin, "zmax": zmax, "xgap": 2, "ygap": 2, "colorscale": scale,
+            "colorbar": {"thickness": 10},
+            "hovertemplate": "%{x} break-even, %{y}<br>" + label + ": %{text}" + hover_extra})
+        buttons.append({"label": label, "method": "update",
+                        "args": [{"visible": [i == mi for i in range(len(MEASURES))]}]})
+    figs.append(("Every stop-loss against every break-even",
+                 "Pick the measure from the menu. A stop-loss is that many points above each "
+                 "option's entry price. “+” on a recovery figure means it had not recovered by the "
+                 "end of the data. Hover any cell for the rest of its numbers.",
+                 traces,
+                 {"updatemenus": [{"buttons": buttons, "x": 0, "xanchor": "left", "y": 1.18,
+                                   "yanchor": "top", "showactive": True}],
+                  "xaxis": {"type": "category", "title": "Break-even distance"},
+                  "yaxis": {"autorange": "reversed", "type": "category"},
+                  "margin": {"l": 110, "t": 78}, "_height": 480}))
+
+    # ---- equity and drawdown curves, one stop-loss per line
+    for which, title, note, ytitle in (
+            ("eq", "Cumulative profit by stop-loss", "Pick a break-even from the menu. Each line "
+             "is the same entries with a different stop-loss.", "₹ cumulative"),
+            ("dd", "Drawdown by stop-loss", "How far each line sat below its own previous peak. "
+             "The deepest point is the maximum drawdown; the width of a dip is the recovery time.",
+             "₹ below peak")):
+        tr, btns = [], []
+        for xi, x in enumerate(bes):
+            for si, sl in enumerate(sls):
+                st = grid[(sl, x)]
+                if not st:
+                    continue
+                tr.append({"x": st["dates"], "y": np.round(st[which], 0).tolist(),
+                           "type": "scatter", "mode": "lines", "name": lab(sl),
+                           "visible": xi == 0, "_be": xi,
+                           "line": {"color": SERIES[si % len(SERIES)],
+                                    "width": 2.5 if sl == f"{cfg.be_sl:g}" else 1.5},
+                           "hovertemplate": "%{x}<br>₹%{y:,.0f}<extra>%{fullData.name}</extra>"})
+        for xi, x in enumerate(bes):
+            btns.append({"label": f"{x:g}% break-even", "method": "update",
+                         "args": [{"visible": [t["_be"] == xi for t in tr]}]})
+        for t in tr:
+            t.pop("_be")
+        figs.append((title, note, tr,
+                     {"updatemenus": [{"buttons": btns, "x": 0, "xanchor": "left", "y": 1.2,
+                                       "yanchor": "top", "showactive": True}],
+                      "margin": {"t": 72}, "_height": 450,
+                      "yaxis": {"title": ytitle, "tickformat": ",.0f"}}))
+
+    # ---- return against risk
+    tr = []
+    for xi, x in enumerate(bes):
+        pts = [(sl, grid[(sl, x)]) for sl in sls if grid[(sl, x)]]
+        tr.append({"type": "scatter", "mode": "markers+text",
+                   "x": [-v["max_dd"] for _, v in pts], "y": [v["avg"] for _, v in pts],
+                   "text": [("none" if sl == "none" else sl) for sl, _ in pts],
+                   "textposition": "top center", "textfont": {"size": 10},
+                   "name": f"{x:g}% break-even",
+                   "marker": {"size": 11, "color": SERIES[xi % len(SERIES)]},
+                   "customdata": [[fmt_rs(v["total"]), v["win_rate"], v["recovery_text"]]
+                                  for _, v in pts],
+                   "hovertemplate": "Stop-loss %{text}<br>Avg ₹%{y:,.0f} per expiry<br>"
+                                    "Max drawdown ₹%{x:,.0f}<br>Total %{customdata[0]}<br>"
+                                    "Win rate %{customdata[1]:.0f}%<br>Recovery: %{customdata[2]}"
+                                    "<extra>%{fullData.name}</extra>"})
+    figs.append(("Return against risk: every stop-loss on one picture",
+                 "Each dot is one stop-loss, labelled in points. Up is more profit per expiry; "
+                 "right is a deeper drawdown. Top-left is the better corner.",
+                 tr, {"xaxis": {"title": "Maximum drawdown (₹, deeper to the right)",
+                                "tickformat": ",.0f"},
+                      "yaxis": {"title": "Average profit per expiry (₹)", "tickformat": ",.0f",
+                                "zeroline": True, "zerolinecolor": "#c3c2b7"}}))
+
+    # ---- the whole grid as a table
+    trs = ""
+    for x in bes:
+        for sl in sls:
+            v = grid[(sl, x)]
+            if not v:
+                continue
+            ratio = (v["total"] / -v["max_dd"]) if v["max_dd"] < 0 else None
+            trs += (f"<tr><td>{x:g}%</td><td>{lab(sl)}</td><td>{v['days']}</td>"
+                    f"<td>{fmt_rs(v['avg'])}</td><td>{fmt_rs(v['median'])}</td>"
+                    f"<td>{fmt_rs(v['total'])}</td><td>{v['win_rate']:.0f}%</td>"
+                    f"<td>{v['sl_rate']:.0f}%</td><td>{fmt_rs(v['worst'])}</td>"
+                    f"<td>{fmt_rs(v['max_dd'])}</td><td>{v['dd_text']}</td>"
+                    f"<td>{v['recovery_text']}</td><td>{v['underwater_text']}</td>"
+                    f"<td>{num(v['profit_factor'])}</td>"
+                    f"<td>{'-' if ratio is None else f'{ratio:.1f}'}</td>"
+                    f"<td>{num(v['avg_over_std'])}</td></tr>")
+    cards.append((
+        "Every stop-loss and break-even, in full",
+        f"Entry at the 09:15 candle's midpoint, {mode_txt[cfg.sl_mode]}, {cfg.qty} quantity after "
+        f"₹{cfg.charges:g} charges per trade.",
+        "<div class='scroll tall'><table><thead><tr><th>Break-even</th><th>Stop-loss</th>"
+        "<th>Expiries</th><th>Avg / expiry</th><th>Median / expiry</th><th>Total</th>"
+        "<th>Win rate</th><th>Stopped out</th><th>Worst expiry</th><th>Max drawdown</th>"
+        "<th>Drawdown ran</th><th>Recovery</th><th>Longest below peak</th><th>Profit factor</th>"
+        f"<th>Total ÷ drawdown</th><th>Avg ÷ std dev</th></tr></thead><tbody>{trs}</tbody></table></div>"))
+
+    # ---- insights on the grid
+    for x in bes:
+        ok = {sl: grid[(sl, x)] for sl in sls if grid[(sl, x)]}
+        if not ok:
+            continue
+        shallow = max(ok, key=lambda k: ok[k]["max_dd"])
+        quick = {k: v for k, v in ok.items() if v["max_dd"] < 0 and v["recovered"]}
+        fastest = min(quick, key=lambda k: quick[k]["rec_exp"]) if quick else None
+        insights.append(
+            f"{x:g}% break-even, drawdown: the shallowest was <b>{lab(shallow)}</b> at "
+            f"{fmt_rs(ok[shallow]['max_dd'])}"
+            + (f", and the quickest to recover was <b>{lab(fastest)}</b> "
+               f"({quick[fastest]['recovery_text']})." if fastest else ".")
+            + f" Your {sl_lab}-point stop-loss drew down {fmt_rs(ok[sl_lab]['max_dd'])}"
+            + (f" and took {ok[sl_lab]['recovery_text']}." if ok[sl_lab]["max_dd"] < 0 else "."))
 
     trs = ""
     for x in bes:
