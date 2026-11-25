@@ -1,0 +1,319 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live signals · open-labs</title>
+<base target="_top">
+<style>
+:root{--surface:#fcfcfb;--page:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;
+--border:rgba(11,11,11,.10);--good:#1f7a4d;--bad:#c23a3a;--warn:#9a6700;--accent:#2a78d6;--chip:#efeee9}
+@media (prefers-color-scheme:dark){:root{--surface:#1b1b1a;--page:#121211;--ink:#f2f1ec;--ink2:#b9b7ae;--muted:#8a887f;
+--grid:#2c2c2a;--border:rgba(255,255,255,.12);--good:#4cc38a;--bad:#ef6b6b;--warn:#e0b341;--accent:#6aa8ff;--chip:#262624}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+main{max-width:1160px;margin:0 auto;padding:0 16px 64px}
+header.top{position:sticky;top:0;z-index:20;background:var(--page);border-bottom:1px solid var(--border);padding:12px 16px}
+header.top .in{max-width:1160px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+h1{font-size:19px;margin:0}h2{font-size:19px;margin:0}h3{font-size:15px;margin:14px 0 6px}
+.sub{color:var(--ink2);font-size:13px;margin:2px 0 0}
+.btn{font:inherit;font-size:14px;padding:7px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn:disabled{opacity:.5;cursor:default}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.status{font-size:13px;color:var(--ink2)}
+.pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--chip);color:var(--ink2);white-space:nowrap}
+.pill.on{color:var(--good)}.pill.off{color:var(--bad)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:18px 0 6px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.tile .k{color:var(--ink2);font-size:13px}.tile .v{font-size:22px;font-weight:600}.tile .s{color:var(--muted);font-size:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin:18px 0}
+.sechead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:baseline}
+.secnote{font-size:13px;color:var(--ink2);margin:4px 0 10px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
+.chips button{font:inherit;font-size:13px;padding:4px 12px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--ink2);cursor:pointer}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--grid);vertical-align:top}
+th{color:var(--ink2);font-weight:600;font-size:13px}
+td.n,th.n{text-align:right}
+tr.row{cursor:pointer}tr.row:hover td{background:color-mix(in srgb,var(--chip) 60%,transparent)}
+tr.detail td{background:var(--page);font-size:13px;color:var(--ink2)}
+.sym{font-weight:600}.small{font-size:12px;color:var(--muted)}
+.buy{color:var(--good);font-weight:600}.short{color:var(--bad);font-weight:600}
+.win{color:var(--good)}.loss{color:var(--bad)}.open{color:var(--ink2)}
+.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--chip);color:var(--ink2);margin-left:4px;white-space:nowrap}
+.tag.warn{color:var(--warn)}
+.pager{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--ink2);margin:8px 0 4px}
+.pager button{font:inherit;font-size:13px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink);cursor:pointer}
+.pager button:disabled{opacity:.4;cursor:default}
+.empty{color:var(--muted);font-size:14px;padding:12px 4px}
+details{margin:8px 0}summary{cursor:pointer;font-size:14px;color:var(--ink2)}
+.strat{border-top:1px solid var(--grid);padding:8px 0;font-size:13px}
+.strat b{color:var(--ink)}
+ul.ins{margin:6px 0;padding-left:20px;font-size:14px}ul.ins li{margin:5px 0}
+a{color:var(--accent)}
+.links{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.links a{font-size:13px;padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--ink);text-decoration:none}
+dialog{border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--ink);max-width:520px;width:calc(100% - 32px)}
+dialog input{width:100%;font:inherit;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--page);color:var(--ink)}
+dialog ol{font-size:13px;color:var(--ink2);padding-left:18px}
+.foot{font-size:12px;color:var(--muted);margin-top:28px}
+@media (max-width:640px){
+ table.sig thead{display:none}
+ table.sig tr.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px 10px;padding:10px 4px;border-bottom:1px solid var(--grid)}
+ table.sig tr.row td{border:0;padding:2px 0}
+ table.sig tr.row td::before{content:attr(data-l);display:block;font-size:11px;color:var(--muted)}
+ table.sig tr.row td.c-sym{grid-column:1/3}table.sig tr.row td.c-res{grid-column:1/4}
+ table.sig td.n{text-align:left}
+ table.sig tr.detail{display:block}table.sig tr.detail td{display:block}
+}
+</style></head><body>
+<header class="top"><div class="in">
+ <div><h1>Live signals</h1><p class="sub" id="sub">Loading…</p></div>
+ <div class="actions">
+  <span class="status" id="status"></span>
+  <button class="btn primary" id="refresh">Refresh</button>
+  <button class="btn" id="settings" title="GitHub token for the Refresh button">⚙</button>
+ </div>
+</div></header>
+<main>
+ <div class="tiles" id="tiles"></div>
+ <div id="sections"></div>
+
+ <section class="card" id="research">
+  <h2>All research so far</h2>
+  <p class="secnote">The scans above use these backtests. Each report has the full rules, year-by-year results and every trade.</p>
+  <div class="links">
+   <a href="../index.html#t3">Market patterns 2015–26</a>
+   <a href="../index.html#t5">Volume Breakout (S9)</a>
+   <a href="../index.html#t2">First minute at 9:15</a>
+   <a href="../index.html#t1">Strangle backtest</a>
+   <a href="../index.html#t4">NIFTY strangle (1430 qty)</a>
+   <a href="../patterns_report.html">Patterns report (full page)</a>
+   <a href="../volume_breakout_report.html">Volume Breakout report</a>
+   <a href="../open_minute_report.html">Opening-minute report</a>
+   <a href="../options_lab_report.html">Options lab</a>
+   <a href="../intraday/index.html">Intraday direction site</a>
+   <a href="https://github.com/yatharth77/open-labs">GitHub repo</a>
+   <a href="https://github.com/yatharth77/open-labs/tree/main/nifty-data">1-min data (2015–Apr 2026)</a>
+   <a href="https://github.com/yatharth77/open-labs/tree/main/claude_data">Options data export</a>
+   <a href="https://github.com/yatharth77/open-labs/tree/main/research">Research scripts</a>
+   <a href="https://github.com/yatharth77/open-labs/blob/main/signals/engine.py">This scanner's code</a>
+  </div>
+  <h3>What the data said</h3>
+  <ul class="ins" id="findings"></ul>
+ </section>
+ <p class="foot">Scans only — it never places orders. Prices from Yahoo Finance (NSE, ~1 min delay). Probabilities are historical win rates of each rule on NIFTY 100 stocks (2015–Apr 2026), not forecasts. Not SEBI-registered; not investment advice. Paper-trade first.</p>
+</main>
+
+<dialog id="dlg"><form method="dialog">
+ <h2>Refresh button setup</h2>
+ <p class="secnote">Refresh asks GitHub to re-run the scan now (1–2 minutes). It needs a GitHub token, which is stored only in this browser.</p>
+ <ol>
+  <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Fine-grained tokens → Generate</a>.</li>
+  <li>Repository access: <b>Only select repositories → open-labs</b>.</li>
+  <li>Permissions: <b>Actions: Read and write</b> and <b>Contents: Read-only</b>. Nothing else.</li>
+  <li>Generate, copy and paste it here.</li>
+ </ol>
+ <input id="tok" type="password" placeholder="github_pat_…" autocomplete="off">
+ <p class="secnote">No token? <a href="https://github.com/yatharth77/open-labs/actions/workflows/signals.yml" target="_blank" rel="noopener">Run it from GitHub</a> → “Run workflow”.</p>
+ <div class="actions"><button class="btn primary" value="save" id="save">Save</button><button class="btn" value="clear" id="clear">Remove token</button><button class="btn" value="cancel">Close</button></div>
+</form></dialog>
+
+<script>
+const REPO = "yatharth77/open-labs", WF = "signals.yml", PAGE = 5;
+const SECTIONS = [
+ {key:"intraday", time:"9:20", title:"9:20 · Intraday",
+  blurb:"Failed gap-up short (and the 9:16 first-minute fade, shown as a record). Exit by 10:20.", strategies:["GF","OFL","OFS"]},
+ {key:"long", time:"11:00", title:"11:00 · Long term",
+  blurb:"Volume Breakout S9, 52-week-high breakout and dip-in-uptrend. Holds of 21–63 sessions.", strategies:["S9","B4","A2","A5"]},
+ {key:"overnight", time:"15:00", title:"15:00 · Overnight",
+  blurb:"Buy near 15:00, sell next morning (momentum carry) or next close (panic-day rebound). New research, tested on 2015–26 data.", strategies:["O1","O2"]}];
+const FINDINGS = [
+ "<b>Volume Breakout S9</b> — breakout above a 6-month/1-year/2-year high on ≥2× volume, confirmed 2 weeks later: <b>70.3% won, avg +13.3%</b> over 63 sessions (118 trades; 2022–26: 70.8%).",
+ "<b>Dip in an uptrend</b> (5-day fall >12% while above the 200-day average): 21-day hold <b>65% won, avg +5.4%</b>; with +5% target / −10% stop <b>73.7% won</b> but only +1.3% avg.",
+ "<b>52-week-high breakout on 2× volume</b> (NIFTY healthy): 62.6% won, avg +7.1% over 63 sessions — only a small edge over a random 63-day hold (+5.1%).",
+ "<b>Failed gap-up short at 9:20</b>, recomputed on every qualifying stock-day: <b>52.4% won, avg +0.08%</b> after costs (3,312 trades). Thin edge — the 20% of trades that hit the 1.5% stop decide the month.",
+ "<b>First-minute crash bounce</b> (9:15 candle ≤ −3%, buy 9:16): 58.4% won 2015–26, but only <b>44.8% since 2022</b> — the edge has faded. Spike-fade shorts: 54.5%.",
+ "<b>Overnight</b> (new): up ≥5% at 15:00 on ≥3× volume → sell next open: <b>57% won after 0.25% costs, avg +0.39%</b>, positive in all 12 years. Stock down ≥3% on a NIFTY −1.5% day (still above 200-day avg) → sell next close: <b>62% won, avg +0.74%</b> net.",
+ "Intraday breakouts (9:30–10:30) won only 34–42%; <b>no hour of the day</b> was reliably predictable; <b>candle patterns did no better than random</b>; higher volume means bigger swings, not a direction.",
+ "Stocks in a downtrend or 30%+ below their 52-week high did <b>not</b> keep underperforming (52–60% rose later) — falling alone isn't a sell signal in large caps.",
+ "Options: see the strangle and options-lab reports for premium-vs-move and expiry-day results."
+];
+let DATA = null; const state = {};
+const $ = s => document.querySelector(s);
+const fmt = (x, d = 2) => x == null || isNaN(x) ? "—" : Number(x).toLocaleString("en-IN", {minimumFractionDigits: d, maximumFractionDigits: d});
+const pct = (x, d = 2) => x == null || isNaN(x) ? "—" : (x > 0 ? "+" : "") + Number(x).toFixed(d) + "%";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const todayIST = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+
+async function load(fromApi) {
+  let j;
+  try {
+    const tok = localStorage.getItem("gh_token");
+    if (fromApi && tok) {
+      const r = await fetch(`https://api.github.com/repos/${REPO}/contents/signals/data/latest.json?ref=main&t=${Date.now()}`,
+        {headers: {Authorization: "Bearer " + tok, Accept: "application/vnd.github.raw+json"}, cache: "no-store"});
+      if (!r.ok) throw new Error("GitHub " + r.status);
+      j = await r.json();
+    } else {
+      const r = await fetch("data/latest.json?t=" + Date.now(), {cache: "no-store"});
+      if (!r.ok) throw new Error("no data yet");
+      j = await r.json();
+    }
+  } catch (e) { $("#sub").textContent = "No scan data yet — the first scheduled run will create it (" + e.message + ")."; renderFindings(); return; }
+  DATA = j; render();
+}
+
+function render() {
+  const g = new Date(DATA.generated);
+  $("#sub").innerHTML = `Last scan ${g.toLocaleString("en-IN", {timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"})} IST · ` +
+    (DATA.market_open_today ? '<span class="pill on">market open today</span>' : '<span class="pill off">market closed today</span>') +
+    (DATA.errors && DATA.errors.length ? ` <span class="pill" title="${esc(DATA.errors.join("\n"))}">${DATA.errors.length} fetch issue(s)</span>` : "");
+  renderTiles(); renderSections(); renderFindings();
+}
+
+function renderTiles() {
+  const A = DATA.accuracy || {};
+  $("#tiles").innerHTML = SECTIONS.map(s => {
+    const a = A[s.key] || {};
+    const v = a.closed ? `${a.hit}%` : "—";
+    const sub = a.closed ? `${a.wins} of ${a.closed} calls won · backtest expected ${a.expected}% · avg ${pct(a.avg_pnl)}` : "No finished calls yet";
+    return `<div class="tile"><div class="k">${s.title} — live hit rate</div><div class="v">${v}</div><div class="s">${sub}${a.open ? ` · ${a.open} open` : ""}</div></div>`;
+  }).join("");
+}
+
+function sectionRows(key) {
+  const today = DATA.sections?.[key]?.date || todayIST();
+  let rows = (DATA.signals || []).filter(s => s.section === key);
+  const prev = (DATA.sections?.[key]?.preview_signals || []).map(s => ({...s, preview: true}));
+  rows = prev.concat(rows);
+  const f = state[key]?.filter || "now";
+  if (f === "now") rows = rows.filter(s => s.date === today || s.status === "open" || s.preview);
+  if (f === "past") rows = rows.filter(s => s.status === "closed");
+  rows.sort((a, b) => (b.date.localeCompare(a.date)) || ((a.over_limit ? 1 : 0) - (b.over_limit ? 1 : 0)) || ((a.rank || 0) - (b.rank || 0)));
+  return rows;
+}
+
+function resultCell(s) {
+  const r = s.result;
+  if (s.preview) return '<span class="open">Preview — logged at 15:00 if it still qualifies</span>';
+  if (!r) return '<span class="open">Pending</span>';
+  if (r.outcome === "unscored") return '<span class="small">Not scored (no data)</span>';
+  if (r.outcome === "open") return `<span class="open">${pct(r.pnl)}</span> <span class="small">${esc(r.note)}</span>`;
+  const cls = r.pnl > 0 ? "win" : "loss";
+  return `<span class="${cls}">${r.pnl > 0 ? "✓" : "✗"} ${pct(r.pnl)}</span> <span class="small">${esc(r.note)}</span>`;
+}
+
+function renderSections() {
+  $("#sections").innerHTML = SECTIONS.map(sec => {
+    const S = DATA.sections?.[sec.key] || {};
+    const run = S.run_at ? new Date(S.run_at).toLocaleString("en-IN", {timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"}) : "not run yet";
+    let extra = "";
+    if (sec.key === "long" && S.nifty_healthy != null) extra = ` · NIFTY filter: ${S.nifty_healthy ? "healthy (above 50 & 200-day avg)" : "<b>not healthy</b> — 52-week breakouts paused"}`;
+    if (sec.key === "overnight" && S.nifty_ret != null) extra = ` · NIFTY ${pct(S.nifty_ret)} at scan`;
+    const f = state[sec.key]?.filter || "now";
+    const strat = sec.strategies.map(k => DATA.priors?.[k]).filter(Boolean).map(p =>
+      `<div class="strat"><b>${esc(p.name)}</b> (${p.side === "BUY" ? "buy" : "short"}) — ${esc(p.rule)}<br>Entry: ${esc(p.entry)} · Exit: ${esc(p.exit)}${p.stop ? ` · Stop: ${p.stop}%` : ""}${p.target_pct ? ` · Target: +${p.target_pct}%` : ""}<br>
+      Backtest: <b>${p.win}% won</b> of ${p.n.toLocaleString("en-IN")} trades, avg ${pct(p.avg)}, median win ${pct(p.med_win)}, median loss ${pct(p.med_loss)}, worst 10% ≤ ${pct(p.p10)}${p.oos_n ? ` · 2022–26: ${p.oos_win}% won (${p.oos_n})` : ""}</div>`).join("");
+    return `<section class="card" id="sec-${sec.key}">
+      <div class="sechead"><h2>${sec.title}</h2><span class="small">Last run ${run}</span></div>
+      <p class="secnote">${sec.blurb}${extra}${S.note ? ` · <b>${esc(S.note)}</b>` : ""}</p>
+      <div class="chips" role="group">
+        ${[["now", "Today & open"], ["past", "Track record"], ["all", "All"]].map(([k, l]) => `<button data-sec="${sec.key}" data-f="${k}" aria-pressed="${f === k}">${l}</button>`).join("")}
+      </div>
+      <div id="tbl-${sec.key}"></div>
+      <h3>Could trigger soon</h3>
+      <div id="watch-${sec.key}"></div>
+      <details><summary>Rules and backtest numbers</summary>${strat}</details>
+    </section>`;
+  }).join("");
+  SECTIONS.forEach(s => { drawTable(s.key); drawWatch(s.key); });
+  document.querySelectorAll(".chips button").forEach(b => b.onclick = () => {
+    state[b.dataset.sec] = {...(state[b.dataset.sec] || {}), filter: b.dataset.f, page: 0};
+    b.parentNode.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    drawTable(b.dataset.sec);
+  });
+}
+
+function pager(n, page, onGo) {
+  const pages = Math.max(1, Math.ceil(n / PAGE));
+  if (pages <= 1) return "";
+  return `<div class="pager"><span>${page * PAGE + 1}–${Math.min(n, (page + 1) * PAGE)} of ${n}</span><span>
+    <button data-go="${page - 1}" ${page === 0 ? "disabled" : ""}>‹ Prev</button>
+    <button data-go="${page + 1}" ${page >= pages - 1 ? "disabled" : ""}>Next ›</button></span></div>`;
+}
+
+function drawTable(key) {
+  const rows = sectionRows(key), st = state[key] = state[key] || {};
+  st.page = Math.min(st.page || 0, Math.max(0, Math.ceil(rows.length / PAGE) - 1));
+  const el = $("#tbl-" + key);
+  if (!rows.length) { el.innerHTML = `<div class="empty">${(st.filter || "now") === "past" ? "No finished calls yet." : "No signal right now. Most days have none — that is normal for these rules."}</div>`; return; }
+  const page = rows.slice(st.page * PAGE, (st.page + 1) * PAGE);
+  el.innerHTML = `<table class="sig"><thead><tr><th>Stock</th><th>Action</th><th class="n">Entry</th><th class="n">Stop</th><th class="n">Target</th><th class="n">Success probability</th><th>Result</th></tr></thead><tbody>` +
+    page.map((s, i) => {
+      const tags = (s.preview ? '<span class="tag warn">preview</span>' : "") + (s.over_limit ? '<span class="tag">over daily limit</span>' : "") + (s.late ? '<span class="tag">9:16 record</span>' : "");
+      const id = key + "-" + (st.page * PAGE + i);
+      return `<tr class="row" data-d="${id}">
+        <td class="c-sym" data-l="Stock"><span class="sym">${esc(s.sym)}</span>${tags}<div class="small">${esc(s.strategy_name)} · ${esc(s.date)}</div></td>
+        <td data-l="Action" class="${s.side === "BUY" ? "buy" : "short"}">${s.side === "BUY" ? "Buy" : "Short sell"}</td>
+        <td class="n" data-l="Entry">₹${fmt(s.entry)}<div class="small">${esc(s.entry_note)}</div></td>
+        <td class="n" data-l="Stop">${s.stop ? "₹" + fmt(s.stop) : "—"}<div class="small">${s.stop ? pct((s.stop / s.entry - 1) * 100, 1) : "time exit"}</div></td>
+        <td class="n" data-l="Target">${s.target ? "₹" + fmt(s.target) : "—"}<div class="small">${s.target ? pct((s.target / s.entry - 1) * 100, 1) + (s.strategy === "A5" ? "" : " (median win)") : ""}</div></td>
+        <td class="n" data-l="Probability"><b>${s.prob}%</b><div class="small">${s.prob_n.toLocaleString("en-IN")} past trades</div></td>
+        <td class="c-res" data-l="Result">${resultCell(s)}</td></tr>
+        <tr class="detail" id="${id}" hidden><td colspan="7">${esc(s.why)}<br><b>Exit:</b> ${esc(s.exit_note)}${s.prob_oos ? ` · 2022–26 win rate ${s.prob_oos}%` : ""}</td></tr>`;
+    }).join("") + `</tbody></table>` + pager(rows.length, st.page);
+  el.querySelectorAll("tr.row").forEach(tr => tr.onclick = () => { const d = document.getElementById(tr.dataset.d); d.hidden = !d.hidden; });
+  el.querySelectorAll(".pager button").forEach(b => b.onclick = () => { st.page = +b.dataset.go; drawTable(key); });
+}
+
+function drawWatch(key) {
+  const W = DATA.sections?.[key]?.watch || [], st = state["w" + key] = state["w" + key] || {page: 0};
+  const el = $("#watch-" + key);
+  if (!W.length) { el.innerHTML = '<div class="empty">Nothing close to triggering.</div>'; return; }
+  const page = W.slice(st.page * PAGE, (st.page + 1) * PAGE);
+  el.innerHTML = `<table><thead><tr><th>Stock</th><th>Setup</th><th class="n">Price</th><th>What it still needs</th></tr></thead><tbody>` +
+    page.map(w => `<tr><td class="sym">${esc(w.sym)}</td><td>${esc(DATA.priors?.[w.strategy]?.name || w.strategy)}</td><td class="n">₹${fmt(w.px)}</td><td>${esc(w.note)}</td></tr>`).join("") +
+    `</tbody></table>` + pager(W.length, st.page);
+  el.querySelectorAll(".pager button").forEach(b => b.onclick = () => { st.page = +b.dataset.go; drawWatch(key); });
+}
+
+function renderFindings() { $("#findings").innerHTML = FINDINGS.map(f => `<li>${f}</li>`).join(""); }
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function refresh() {
+  const tok = localStorage.getItem("gh_token");
+  if (!tok) { $("#dlg").showModal(); return; }
+  const btn = $("#refresh"), stt = $("#status");
+  btn.disabled = true; stt.textContent = "Starting scan…";
+  const H = {Authorization: "Bearer " + tok, Accept: "application/vnd.github+json"};
+  try {
+    const t0 = Date.now();
+    const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WF}/dispatches`,
+      {method: "POST", headers: H, body: JSON.stringify({ref: "main", inputs: {section: "all"}})});
+    if (r.status !== 204) throw new Error(r.status === 401 || r.status === 403 ? "token rejected — check its permissions" : "GitHub " + r.status);
+    let run = null;
+    for (let i = 0; i < 60; i++) {
+      await sleep(i < 3 ? 4000 : 8000);
+      const q = await (await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WF}/runs?event=workflow_dispatch&per_page=3`, {headers: H, cache: "no-store"})).json();
+      run = (q.workflow_runs || []).find(x => new Date(x.created_at).getTime() > t0 - 60e3);
+      if (!run) { stt.textContent = "Waiting for GitHub to start the scan…"; continue; }
+      if (run.status !== "completed") { stt.textContent = `Scanning live prices… (${Math.round((Date.now() - t0) / 1000)}s)`; continue; }
+      break;
+    }
+    if (!run || run.status !== "completed") throw new Error("still running — check back in a minute");
+    if (run.conclusion !== "success") throw new Error("scan failed — see GitHub Actions log");
+    stt.textContent = "Updated just now"; await load(true);
+  } catch (e) { stt.textContent = "Refresh: " + e.message; }
+  btn.disabled = false;
+}
+$("#refresh").onclick = refresh;
+$("#settings").onclick = () => { $("#tok").value = ""; $("#dlg").showModal(); };
+$("#dlg").addEventListener("close", () => {
+  const v = $("#dlg").returnValue;
+  if (v === "save" && $("#tok").value.trim()) { localStorage.setItem("gh_token", $("#tok").value.trim()); $("#status").textContent = "Token saved"; }
+  if (v === "clear") { localStorage.removeItem("gh_token"); $("#status").textContent = "Token removed"; }
+});
+load(false);
+setInterval(() => { if (!document.hidden) load(!!localStorage.getItem("gh_token")); }, 120000);
+</script>
+</body></html>

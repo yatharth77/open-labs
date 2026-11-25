@@ -1,0 +1,65 @@
+name: signals
+
+on:
+  schedule:
+    - cron: "42 3 * * 1-5"    # 09:12 IST -> waits, scans at 09:20:30 (intraday)
+    - cron: "22 5 * * 1-5"    # 10:52 IST -> waits, scans at 11:00     (long term)
+    - cron: "22 9 * * 1-5"    # 14:52 IST -> waits, scans at 15:00     (overnight)
+    - cron: "15 10 * * 1-5"   # 15:45 IST -> scores today's calls
+  push:
+    branches: [main]
+    paths: ["signals/engine.py", "signals/priors.json", ".github/workflows/signals.yml"]
+  workflow_dispatch:
+    inputs:
+      section:
+        description: "intraday | long | overnight | score | all"
+        default: "all"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signals
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout (signals folder only - the repo has 5 GB of minute data we don't need here)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            signals
+            .github
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Pick section
+        id: pick
+        run: |
+          case "${{ github.event.schedule }}" in
+            "42 3 * * 1-5")  echo "section=intraday" >> $GITHUB_OUTPUT; echo "wait=--wait" >> $GITHUB_OUTPUT ;;
+            "22 5 * * 1-5")  echo "section=long" >> $GITHUB_OUTPUT;     echo "wait=--wait" >> $GITHUB_OUTPUT ;;
+            "22 9 * * 1-5")  echo "section=overnight" >> $GITHUB_OUTPUT; echo "wait=--wait" >> $GITHUB_OUTPUT ;;
+            "15 10 * * 1-5") echo "section=score" >> $GITHUB_OUTPUT ;;
+            *) echo "section=${{ github.event.inputs.section || 'all' }}" >> $GITHUB_OUTPUT ;;
+          esac
+      - name: Run scan
+        run: python signals/engine.py --section ${{ steps.pick.outputs.section }} ${{ steps.pick.outputs.wait }}
+      - name: Commit results
+        run: |
+          git config user.name "signals-bot"
+          git config user.email "signals-bot@users.noreply.github.com"
+          git add signals/data
+          git diff --cached --quiet && exit 0
+          git commit -m "signals: ${{ steps.pick.outputs.section }} $(TZ=Asia/Kolkata date '+%Y-%m-%d %H:%M') IST"
+          for i in 1 2 3 4; do
+            git pull --rebase -X theirs origin main && git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1
