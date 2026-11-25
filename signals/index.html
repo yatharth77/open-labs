@@ -167,6 +167,7 @@ function render() {
   const g = new Date(DATA.generated);
   $("#sub").innerHTML = `Last scan ${g.toLocaleString("en-IN", {timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"})} IST · ` +
     (DATA.market_open_today ? '<span class="pill on">market open today</span>' : '<span class="pill off">market closed today</span>') +
+    (DATA.data_problem ? ` <span class="pill off">${esc(DATA.data_problem)}</span>` : "") +
     (DATA.errors && DATA.errors.length ? ` <span class="pill" title="${esc(DATA.errors.join("\n"))}">${DATA.errors.length} fetch issue(s)</span>` : "");
   renderTiles(); renderSections(); renderFindings();
 }

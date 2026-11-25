@@ -98,7 +98,7 @@ class Yahoo:
         return self.chart(sym, "1m", "5d")
 
 
-def fetch_all(fn, syms, workers=6):
+def fetch_all(fn, syms, workers=2):
     with ThreadPoolExecutor(workers) as ex:
         return dict(zip(syms, ex.map(fn, syms)))
 
@@ -551,7 +551,15 @@ def run(section, src=None, t_now=None):
     log = load_json("log.json", {})
     latest = load_json("latest.json", {"sections": {}})
     nifty_daily = src.daily(NIFTY)
-    market_open_today = bool(nifty_daily) and nifty_daily[-1]["t"].date() == d
+    if not nifty_daily:  # feed unreachable: say so instead of pretending the market is shut
+        latest["generated"] = t_now.isoformat(timespec="seconds")
+        latest["errors"] = (src.errors if hasattr(src, "errors") else [])[-20:]
+        latest["data_problem"] = "The price feed could not be reached, so nothing was updated."
+        save_json("latest.json", latest)
+        print("price feed unavailable:", latest["errors"][:3])
+        return latest
+    latest.pop("data_problem", None)
+    market_open_today = nifty_daily[-1]["t"].date() == d
     completed_today = t_now.hour * 60 + t_now.minute >= 15 * 60 + 35
     daily = fetch_all(src.daily, UNIVERSE)
     m1_cache = {}
