@@ -166,11 +166,15 @@ async function load(fromApi) {
 
 function render() {
   const g = new Date(DATA.generated);
-  $("#sub").innerHTML = `Last scan ${g.toLocaleString("en-IN", {timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"})} IST · ` +
+  $("#sub").innerHTML = (DATA.runner === "mac" ? "Scanned on your Mac · " : "") + `Last scan ${g.toLocaleString("en-IN", {timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"})} IST · ` +
     (DATA.data_problem ? "" : DATA.market_open_today ? '<span class="pill on">market open today</span>' : '<span class="pill off">market closed today</span>') +
     (DATA.data_problem ? ` <span class="pill off">${esc(DATA.data_problem)}</span>` : "") +
     (DATA.errors && DATA.errors.length ? ` <span class="pill" title="${esc(DATA.errors.join("\n"))}">${DATA.errors.length} fetch issue(s)</span>` : "");
-  $("#banner").innerHTML = DATA.data_problem ? `<div class="card" style="border-color:var(--bad)"><b>Price feed blocked.</b> Yahoo Finance refuses requests from GitHub's servers, so scheduled scans can't fetch prices. Calls below marked "manual" were run through your browser. A permanent fix needs a feed that allows server access (Zerodha Kite Connect) or running the scanner from your own computer.</div>` : "";
+  const ageH = (Date.now() - new Date(DATA.generated).getTime()) / 3600e3;
+  const istNow = new Date(Date.now() + 5.5 * 3600e3), wd = istNow.getUTCDay(), hm = istNow.getUTCHours() * 100 + istNow.getUTCMinutes();
+  const stale = wd >= 1 && wd <= 5 && hm >= 930 && hm <= 1600 && ageH > 1.5;
+  $("#banner").innerHTML = DATA.data_problem ? `<div class="card" style="border-color:var(--bad)"><b>Price feed problem.</b> ${esc(DATA.data_problem)} Scans run on your Mac — check it is awake and the scanner is installed.</div>`
+    : stale ? `<div class="card" style="border-color:var(--warn)"><b>No scan for ${ageH.toFixed(1)} hours during market time.</b> Scans run on your Mac (Yahoo blocks GitHub's servers) — check it is awake. Log: <code>~/.openlabs-signals/agent.log</code></div>` : "";
   renderTiles(); renderSections(); renderFindings();
 }
 
@@ -303,9 +307,16 @@ async function refresh() {
       if (run.status !== "completed") { stt.textContent = `Scanning live prices… (${Math.round((Date.now() - t0) / 1000)}s)`; continue; }
       break;
     }
-    if (!run || run.status !== "completed") throw new Error("still running — check back in a minute");
-    if (run.conclusion !== "success") throw new Error("scan failed — see GitHub Actions log");
-    stt.textContent = "Updated just now"; await load(true);
+    if (!run || run.status !== "completed") throw new Error("GitHub is slow — check back in a minute");
+    if (run.conclusion !== "success") throw new Error("request failed — see GitHub Actions log");
+    // the Mac agent checks for requests every minute, then scans (~2–4 min)
+    for (let i = 0; i < 60; i++) {
+      stt.textContent = `Waiting for your Mac to scan… (${Math.round((Date.now() - t0) / 1000)}s)`;
+      await sleep(10000);
+      await load(true);
+      if (DATA && new Date(DATA.generated).getTime() > t0) { stt.textContent = "Updated just now"; btn.disabled = false; return; }
+    }
+    throw new Error("your Mac didn't respond in 10 min — is it awake with the scanner installed?");
   } catch (e) { stt.textContent = "Refresh: " + e.message; }
   btn.disabled = false;
 }

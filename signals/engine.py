@@ -98,7 +98,7 @@ class Yahoo:
         return self.chart(sym, "1m", "5d")
 
 
-def fetch_all(fn, syms, workers=2):
+def fetch_all(fn, syms, workers=int(os.environ.get("SIGNALS_WORKERS", "2"))):
     with ThreadPoolExecutor(workers) as ex:
         return dict(zip(syms, ex.map(fn, syms)))
 
@@ -616,6 +616,7 @@ def run(section, src=None, t_now=None):
             except Exception as e:
                 sig.setdefault("errors", []).append(str(e)[:120])
     latest["generated"] = t_now.isoformat(timespec="seconds")
+    latest["runner"] = os.environ.get("SIGNALS_RUNNER", "github")
     latest["market_open_today"] = market_open_today
     latest["accuracy"] = accuracy(log)
     latest["priors"] = {k: {kk: v[kk] for kk in ("name", "section", "side", "rule", "entry", "exit", "stop", "target_pct",
