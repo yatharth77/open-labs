@@ -52,6 +52,24 @@ OVERNIGHT_COST = 0.25  # % round trip, delivery
 
 
 # --------------------------------------------------------------------------- data
+_SSL = None
+
+
+def _ssl_context():
+    """Certificate checks stay ON. Python 3.13 added an extra 'strict' rule that rejects the
+    root certificates many office networks use to inspect HTTPS; that one rule is relaxed.
+    SSL_CERT_FILE is honoured for the trust store."""
+    global _SSL
+    if _SSL is None:
+        import ssl
+        cafile = os.environ.get("SSL_CERT_FILE") or None
+        ctx = ssl.create_default_context(cafile=cafile)
+        if hasattr(ssl, "VERIFY_X509_STRICT"):
+            ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+        _SSL = ctx
+    return _SSL
+
+
 class Yahoo:
     HOSTS = ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com")
     UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"}
@@ -67,7 +85,7 @@ class Yahoo:
             host = self.HOSTS[attempt % 2]
             try:
                 req = urllib.request.Request(host + path, headers=self.UA)
-                with urllib.request.urlopen(req, timeout=20) as r:
+                with urllib.request.urlopen(req, timeout=20, context=_ssl_context()) as r:
                     j = json.load(r)
                 res = j["chart"]["result"][0]
                 q = res["indicators"]["quote"][0]
@@ -641,4 +659,5 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.wait:
         wait_until(a.section)
-    run(a.section)
+    out = run(a.section)
+    sys.exit(2 if out.get("data_problem") else 0)  # non-zero so the Mac agent retries next minute
