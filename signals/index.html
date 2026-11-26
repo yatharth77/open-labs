@@ -75,6 +75,7 @@ dialog ol{font-size:13px;color:var(--ink2);padding-left:18px}
  </div>
 </div></header>
 <main>
+ <div id="banner"></div>
  <div class="tiles" id="tiles"></div>
  <div id="sections"></div>
 
@@ -166,9 +167,10 @@ async function load(fromApi) {
 function render() {
   const g = new Date(DATA.generated);
   $("#sub").innerHTML = `Last scan ${g.toLocaleString("en-IN", {timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"})} IST · ` +
-    (DATA.market_open_today ? '<span class="pill on">market open today</span>' : '<span class="pill off">market closed today</span>') +
+    (DATA.data_problem ? "" : DATA.market_open_today ? '<span class="pill on">market open today</span>' : '<span class="pill off">market closed today</span>') +
     (DATA.data_problem ? ` <span class="pill off">${esc(DATA.data_problem)}</span>` : "") +
     (DATA.errors && DATA.errors.length ? ` <span class="pill" title="${esc(DATA.errors.join("\n"))}">${DATA.errors.length} fetch issue(s)</span>` : "");
+  $("#banner").innerHTML = DATA.data_problem ? `<div class="card" style="border-color:var(--bad)"><b>Price feed blocked.</b> Yahoo Finance refuses requests from GitHub's servers, so scheduled scans can't fetch prices. Calls below marked "manual" were run through your browser. A permanent fix needs a feed that allows server access (Zerodha Kite Connect) or running the scanner from your own computer.</div>` : "";
   renderTiles(); renderSections(); renderFindings();
 }
 
@@ -251,7 +253,7 @@ function drawTable(key) {
   const page = rows.slice(st.page * PAGE, (st.page + 1) * PAGE);
   el.innerHTML = `<table class="sig"><thead><tr><th>Stock</th><th>Action</th><th class="n">Entry</th><th class="n">Stop</th><th class="n">Target</th><th class="n">Success probability</th><th>Result</th></tr></thead><tbody>` +
     page.map((s, i) => {
-      const tags = (s.preview ? '<span class="tag warn">preview</span>' : "") + (s.over_limit ? '<span class="tag">over daily limit</span>' : "") + (s.late ? '<span class="tag">9:16 record</span>' : "");
+      const tags = (s.preview ? '<span class="tag warn">preview</span>' : "") + (s.over_limit ? '<span class="tag">over daily limit</span>' : "") + (s.late ? '<span class="tag">9:16 record</span>' : "") + (s.manual ? '<span class="tag">manual</span>' : "");
       const id = key + "-" + (st.page * PAGE + i);
       return `<tr class="row" data-d="${id}">
         <td class="c-sym" data-l="Stock"><span class="sym">${esc(s.sym)}</span>${tags}<div class="small">${esc(s.strategy_name)} · ${esc(s.date)}</div></td>

@@ -190,8 +190,10 @@ def make_signal(strategy, sym, d, side, entry, stop, target, why, entry_note, ex
 # --------------------------------------------------------------------------- 9:20 intraday
 def scan_intraday(src, d, daily, nifty_daily):
     """Failed gap-up short (GF) + first-minute spike fades (OFL/OFS). Uses bars up to 9:19."""
-    m5 = fetch_all(src.m5, UNIVERSE)
-    m1 = fetch_all(src.m1, UNIVERSE)
+    # Yahoo reports 0 volume for the 9:15 minute, so opening volume is measured on 9:16-9:19
+    # (today vs the previous sessions in Yahoo's ~5-day 1-minute history).
+    wk = fetch_all(src.m1_week if hasattr(src, "m1_week") else src.m1, UNIVERSE)
+    m1 = {k: today_bars(v or [], d) for k, v in wk.items()}
     rows, watch, fades = [], [], []
     for s in UNIVERSE:
         db = daily.get(s) or []
@@ -206,13 +208,12 @@ def scan_intraday(src, d, daily, nifty_daily):
         op = first[0]["o"]
         px = first[-1]["c"]  # 9:19 close = 9:20 price
         # opening 5-minute volume vs 20-session norm, measured on 5-min bars (consistent today vs history)
-        bars5 = m5.get(s) or []
         fv = {}
-        for b in bars5:
-            if b["t"].hour == 9 and b["t"].minute == 15:
-                fv[b["t"].date()] = b["v"]
+        for b in wk.get(s) or []:
+            if 1 <= minute_idx(b["t"]) <= 4:
+                fv[b["t"].date()] = fv.get(b["t"].date(), 0) + b["v"]
         hist = [fv[k] for k in sorted(fv) if k < d][-20:]
-        base = mean(hist) if len(hist) >= 10 else float("nan")
+        base = mean(hist) if len(hist) >= 3 else float("nan")
         rv = fv.get(d, float("nan")) / base if base and not math.isnan(base) else float("nan")
         gap = (op / pc - 1) * 100
         drop = (px / op - 1) * 100
@@ -555,6 +556,9 @@ def run(section, src=None, t_now=None):
         latest["generated"] = t_now.isoformat(timespec="seconds")
         latest["errors"] = (src.errors if hasattr(src, "errors") else [])[-20:]
         latest["data_problem"] = "The price feed could not be reached, so nothing was updated."
+        latest["market_open_today"] = None
+        for v in latest.get("sections", {}).values():
+            v.pop("note", None)
         save_json("latest.json", latest)
         print("price feed unavailable:", latest["errors"][:3])
         return latest
