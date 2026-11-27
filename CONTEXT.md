@@ -10,6 +10,8 @@ _Last updated: 27 Nov 2026_
 - `nifty-data/`: 1-minute OHLCV, 116 NIFTY 100 stocks + NIFTY/BANKNIFTY, Feb 2015 – 8 Apr 2026 (5.3 GB).
 - `claude_data/`: options export from the HF dataset `thetrademarkk/india-index-options-1m`.
 - `research/`: backtest scripts (copied from the analysis sessions).
+- `nifty-data-live/YYYY/MM/YYYY-MM-DD.csv.gz`: **new 1-minute data collected daily by the Mac at ~15:50** (Yahoo; same universe + NIFTY 50 / NIFTY BANK), plus a one-time backfill of Yahoo's last ~30 days. Gap 9 Apr – ~27 Oct 2026 is not available from Yahoo (only Kite Connect historical could fill it). Yahoo's 9:15 volume is 0.
+- `signals/recent.py` (monthly + after backfill): replays intraday/overnight rules on the fresh data → `signals/data/recent_stats.json`; dashboard flags a strategy when ≥20 fresh trades win 10+ points below the backtest.
 - Costs assumed: 0.1% intraday round trip, 0.25% delivery round trip.
 
 ## 2. Strategies: what's tradable (backtest, NIFTY 100, 2015–26)
@@ -37,7 +39,7 @@ _Last updated: 27 Nov 2026_
 - Dashboard: https://yatharth77.github.io/open-labs/signals/ (also "Live signals" tab on the site).
 - Engine: `signals/engine.py`; priors in `signals/priors.json`; every call logged in `signals/data/log.json` and scored.
 - **Price feed: Yahoo, fetched on Yatharth's Mac** (`signals/mac/`, launchd every minute). Yahoo blocks GitHub's servers (HTTP 429) — decided *not* to work around that. Alternative if the Mac route fails: Zerodha Kite Connect (official, paid, daily login).
-- Schedule (IST, weekdays): 09:21 intraday, 11:00 long term, 15:00 overnight, 15:46 scoring. Refresh button → GitHub workflow records a request → Mac scans within ~1 min.
+- Schedule (IST, weekdays): 09:21 intraday, 11:00 long term, 15:00 overnight, 15:46 scoring, 15:48 post-close long-term check ("✅ buy at the next open" rows for S9/B4/dip that confirmed at the close), 15:50 data collection. Refresh button → GitHub workflow records a request → Mac scans within ~1 min.
 - Office-network TLS: Python 3.13 strict-X509 rule relaxed; certificate verification stays on.
 - Intraday section always uses the 9:15–9:19 snapshot; refresh only updates results. Overnight before 15:00 = preview, not logged.
 - Yahoo quirk: 9:15 1-minute volume is reported as 0 → opening volume measured on 9:16–9:19.
