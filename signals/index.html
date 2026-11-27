@@ -140,7 +140,7 @@ const FINDINGS = [
  "Stocks in a downtrend or 30%+ below their 52-week high did <b>not</b> keep underperforming (52–60% rose later) — falling alone isn't a sell signal in large caps.",
  "Options: see the strangle and options-lab reports for premium-vs-move and expiry-day results."
 ];
-let DATA = null; const state = {};
+let DATA = null, RECENT = null; const state = {};
 const $ = s => document.querySelector(s);
 const fmt = (x, d = 2) => x == null || isNaN(x) ? "—" : Number(x).toLocaleString("en-IN", {minimumFractionDigits: d, maximumFractionDigits: d});
 const pct = (x, d = 2) => x == null || isNaN(x) ? "—" : (x > 0 ? "+" : "") + Number(x).toFixed(d) + "%";
@@ -162,7 +162,9 @@ async function load(fromApi) {
       j = await r.json();
     }
   } catch (e) { $("#sub").textContent = "No scan data yet — the first scheduled run will create it (" + e.message + ")."; renderFindings(); return; }
-  DATA = j; render();
+  DATA = j;
+  try { const r = await fetch("data/recent_stats.json?t=" + Date.now(), {cache: "no-store"}); RECENT = r.ok ? await r.json() : null; } catch (e) { RECENT = null; }
+  render();
 }
 
 function render() {
@@ -175,6 +177,7 @@ function render() {
   const istNow = new Date(Date.now() + 5.5 * 3600e3), wd = istNow.getUTCDay(), hm = istNow.getUTCHours() * 100 + istNow.getUTCMinutes();
   const stale = wd >= 1 && wd <= 5 && hm >= 930 && hm <= 1600 && ageH > 1.5;
   $("#banner").innerHTML = DATA.data_problem ? `<div class="card" style="border-color:var(--bad)"><b>Price feed problem.</b> ${esc(DATA.data_problem)} Scans run on your Mac — check it is awake and the scanner is installed.</div>`
+    : (RECENT && Object.entries(RECENT.stats || {}).some(([k, v]) => v.drift)) ? `<div class="card" style="border-color:var(--warn)"><b>Edge check:</b> on fresh data since ${esc(RECENT.first_day)}, ${Object.entries(RECENT.stats).filter(([k, v]) => v.drift).map(([k, v]) => `${esc(DATA.priors?.[k]?.name || k)} won ${v.win}% (${v.n} trades) vs ${v.backtest_win}% in the backtest`).join("; ")}. Treat those signals with extra caution.</div>`
     : stale ? `<div class="card" style="border-color:var(--warn)"><b>No scan for ${ageH.toFixed(1)} hours during market time.</b> Scans run on your Mac (Yahoo blocks GitHub's servers) — check it is awake. Log: <code>~/.openlabs-signals/agent.log</code></div>` : "";
   renderTiles(); renderSections(); renderFindings();
 }
@@ -219,9 +222,9 @@ function renderSections() {
     if (sec.key === "long" && S.nifty_healthy != null) extra = ` · NIFTY filter: ${S.nifty_healthy ? "healthy (above 50 & 200-day avg)" : "<b>not healthy</b> — 52-week breakouts paused"}`;
     if (sec.key === "overnight" && S.nifty_ret != null) extra = ` · NIFTY ${pct(S.nifty_ret)} at scan`;
     const f = state[sec.key]?.filter || "now";
-    const strat = sec.strategies.map(k => DATA.priors?.[k]).filter(Boolean).map(p =>
+    const strat = sec.strategies.filter(k => DATA.priors?.[k]).map(k => [k, DATA.priors[k]]).map(([k, p]) =>
       `<div class="strat"><b>${esc(p.name)}</b> (${p.side === "BUY" ? "buy" : "short"}) — ${esc(p.rule)}<br>Entry: ${esc(p.entry)} · Exit: ${esc(p.exit)}${p.stop ? ` · Stop: ${p.stop}%` : ""}${p.target_pct ? ` · Target: +${p.target_pct}%` : ""}<br>
-      Backtest: <b>${p.win}% won</b> of ${p.n.toLocaleString("en-IN")} trades, avg ${pct(p.avg)}, median win ${pct(p.med_win)}, median loss ${pct(p.med_loss)}, worst 10% ≤ ${pct(p.p10)}${p.oos_n ? ` · 2022–26: ${p.oos_win}% won (${p.oos_n})` : ""}</div>`).join("");
+      ${recentLine(k)}Backtest: <b>${p.win}% won</b> of ${p.n.toLocaleString("en-IN")} trades, avg ${pct(p.avg)}, median win ${pct(p.med_win)}, median loss ${pct(p.med_loss)}, worst 10% ≤ ${pct(p.p10)}${p.oos_n ? ` · 2022–26: ${p.oos_win}% won (${p.oos_n})` : ""}</div>`).join("");
     return `<section class="card" id="sec-${sec.key}">
       <div class="sechead"><h2>${sec.title}</h2><span class="small">Last run ${run}</span></div>
       <p class="secnote">${sec.blurb}${extra}${S.note ? ` · <b>${esc(S.note)}</b>` : ""}</p>
@@ -229,7 +232,7 @@ function renderSections() {
         ${[["now", "Today & open"], ["past", "Track record"], ["all", "All"]].map(([k, l]) => `<button data-sec="${sec.key}" data-f="${k}" aria-pressed="${f === k}">${l}</button>`).join("")}
       </div>
       <div id="tbl-${sec.key}"></div>
-      <h3>Could trigger soon</h3>
+      <h3>Could trigger soon <span class="small">(green = confirmed at the close, buy at the next open)</span></h3>
       <div id="watch-${sec.key}"></div>
       <details><summary>Rules and backtest numbers</summary>${strat}</details>
     </section>`;
@@ -240,6 +243,13 @@ function renderSections() {
     b.parentNode.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
     drawTable(b.dataset.sec);
   });
+}
+
+function recentLine(k) {
+  const r = RECENT?.stats?.[k];
+  if (!r || !r.n) return "";
+  const cls = r.drift ? "loss" : "";
+  return `<span class="${cls}">Fresh data ${esc(RECENT.first_day)} → ${esc(RECENT.last_day)}: <b>${r.win}% won</b> of ${r.n}, avg ${pct(r.avg)}${r.drift ? " — ⚠️ well below the backtest" : ""}</span><br>`;
 }
 
 function pager(n, page, onGo) {
@@ -280,7 +290,7 @@ function drawWatch(key) {
   if (!W.length) { el.innerHTML = '<div class="empty">Nothing close to triggering.</div>'; return; }
   const page = W.slice(st.page * PAGE, (st.page + 1) * PAGE);
   el.innerHTML = `<table><thead><tr><th>Stock</th><th>Setup</th><th class="n">Price</th><th>What it still needs</th></tr></thead><tbody>` +
-    page.map(w => `<tr><td class="sym">${esc(w.sym)}</td><td>${esc(DATA.priors?.[w.strategy]?.name || w.strategy)}</td><td class="n">₹${fmt(w.px)}</td><td>${esc(w.note)}</td></tr>`).join("") +
+    page.map(w => `<tr${w.next_open ? ' style="background:color-mix(in srgb,var(--good) 10%,transparent)"' : ""}><td class="sym">${esc(w.sym)}</td><td>${esc(DATA.priors?.[w.strategy]?.name || w.strategy)}</td><td class="n">₹${fmt(w.px)}</td><td>${esc(w.note)}</td></tr>`).join("") +
     `</tbody></table>` + pager(W.length, st.page);
   el.querySelectorAll(".pager button").forEach(b => b.onclick = () => { st.page = +b.dataset.go; drawWatch(key); });
 }

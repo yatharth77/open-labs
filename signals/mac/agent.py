@@ -25,8 +25,10 @@ LOG = os.path.join(STATE, "agent.log")
 PY = sys.executable
 GIT = "/usr/bin/git" if os.path.exists("/usr/bin/git") else "git"
 
-# section, earliest, latest (HHMM, IST)
-SCHEDULE = [("intraday", 921, 1500), ("long", 1100, 1530), ("overnight", 1500, 1529), ("score", 1546, 2359)]
+# flag, command, earliest, latest (HHMM, IST). Commands: engine sections, "collect", "recent".
+SCHEDULE = [("intraday", "intraday", 921, 1500), ("long", "long", 1100, 1530), ("overnight", "overnight", 1500, 1529),
+            ("score", "score", 1546, 2359), ("close", "long", 1548, 2359),   # post-close: "buy at next open" list
+            ("collect", "collect", 1550, 2359)]
 
 
 def log(msg):
@@ -55,8 +57,8 @@ def pull():
         log(f"pull failed: {r.stderr.strip()[:200]}")
 
 
-def push(label):
-    git("add", "signals/data")
+def push(label, paths=("signals/data",)):
+    git("add", *paths)
     if git("diff", "--cached", "--quiet", check=False).returncode == 0:
         return
     git("commit", "-q", "-m", f"signals: {label} {datetime.now(IST):%Y-%m-%d %H:%M} IST (mac)")
@@ -69,13 +71,29 @@ def push(label):
     log("push failed - will retry next minute")
 
 
-def run(section):
-    log(f"run {section}")
+def ensure_sparse():
+    """the minute-data folder must be part of this sparse checkout to commit into it"""
+    r = git("sparse-checkout", "list", check=False)
+    if r.returncode == 0 and "nifty-data-live" not in r.stdout:
+        git("sparse-checkout", "add", "nifty-data-live", check=False)
+
+
+def run(cmd):
+    log(f"run {cmd}")
     env = dict(os.environ, SIGNALS_WORKERS="4", SIGNALS_RUNNER="mac")
-    r = subprocess.run([PY, os.path.join(REPO, "signals", "engine.py"), "--section", section],
-                       cwd=REPO, capture_output=True, text=True, timeout=1500, env=env)
+    if cmd == "collect":
+        args, paths = [os.path.join(REPO, "signals", "collect.py")], ["nifty-data-live"]
+    elif cmd == "backfill":
+        args, paths = [os.path.join(REPO, "signals", "collect.py"), "--backfill"], ["nifty-data-live"]
+    elif cmd == "recent":
+        args, paths = [os.path.join(REPO, "signals", "recent.py")], ["signals/data"]
+    else:
+        args, paths = [os.path.join(REPO, "signals", "engine.py"), "--section", cmd], ["signals/data"]
+    if "nifty-data-live" in paths:
+        ensure_sparse()
+    r = subprocess.run([PY, *args], cwd=REPO, capture_output=True, text=True, timeout=3600, env=env)
     log((r.stdout + r.stderr).strip()[-600:])
-    push(section)
+    push(cmd, paths)
     return r.returncode == 0
 
 
@@ -111,11 +129,22 @@ def main():
         # 2) schedule
         if weekday:
             day = now.strftime("%Y-%m-%d")
-            for section, start, end in SCHEDULE:
-                flag = os.path.join(STATE, f"done-{day}-{section}")
+            for name, cmd, start, end in SCHEDULE:
+                flag = os.path.join(STATE, f"done-{day}-{name}")
                 if start <= hm <= end and not os.path.exists(flag):
-                    if run(section):
+                    if run(cmd):
                         open(flag, "w").close()
+        # one-time backfill of the last ~30 days of minute data, then a recent-performance check
+        if not os.path.exists(os.path.join(STATE, "backfilled")) and (not weekday or hm >= 1555 or hm < 900):
+            if run("backfill"):
+                open(os.path.join(STATE, "backfilled"), "w").close()
+                run("recent")
+        # monthly recent-performance check (first run of each month, after the close)
+        month_flag = os.path.join(STATE, f"recent-{now:%Y-%m}")
+        if os.path.exists(os.path.join(STATE, "backfilled")) and not os.path.exists(month_flag) \
+                and (not weekday or hm >= 1610 or hm < 900):
+            if run("recent"):
+                open(month_flag, "w").close()
             # tidy old flags
             for f in os.listdir(STATE):
                 if f.startswith("done-") and f[5:15] < (now - timedelta(days=7)).strftime("%Y-%m-%d"):

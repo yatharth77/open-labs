@@ -333,6 +333,15 @@ def scan_long(d, daily, nifty_daily, t_now, completed_today):
             vpost = mean(post) / f["base"] if post else float("nan")
             info = (f"{name} high {lvl:,.1f} broken on {dts[i]} with {f['vr']:.1f}× volume; "
                     f"since then volume {vpost:.2f}× normal (needs ≥1.3×), price {(cur / lvl - 1) * 100:+.1f}% vs level")
+            if j == n - 1 and completed_today:
+                if c[j] > lvl and vpost >= 1.3:
+                    watch.append(dict(sym=s, strategy="S9", px=r2(c[j]), next_open=True,
+                                      note="✅ Confirmed at today's close — S9 buy at the next open "
+                                           f"(breakout {dts[i]}). " + info, closeness=-10))
+                else:
+                    watch.append(dict(sym=s, strategy="S9", px=r2(c[j]),
+                                      note="❌ Failed confirmation at today's close. " + info, closeness=50))
+                continue
             if j <= n - 1:
                 if c[j] > lvl and vpost >= 1.3 and j >= n - 5:
                     entry_day = dts[j + 1] if j + 1 < n else d
@@ -367,6 +376,14 @@ def scan_long(d, daily, nifty_daily, t_now, completed_today):
                                         f"Fell {f['r5'] * 100:.1f}% in 5 days to {dts[i]} while above its 200-day average {f['d200']:,.1f}. "
                                         + prob_note(code, s), "Today's open",
                                         "Day 21 close" if code == "A2" else "+5% / −10% / day 21", dict(hold=21)))
+        # ---- after the close: today's completed bar decides tomorrow's B4 / dip entries
+        if completed_today and dts[-1] == d:
+            if healthy and c[i] > max(h[i - 252:i]) and f["vr"] > 2:
+                watch.append(dict(sym=s, strategy="B4", px=r2(c[i]), next_open=True, closeness=-9,
+                                  note=f"✅ Closed above its 52-week high {max(h[i - 252:i]):,.1f} on {f['vr']:.1f}× volume — buy at the next open (hold 63 sessions)."))
+            if f["r5"] < -0.12 and c[i] > f["d200"]:
+                watch.append(dict(sym=s, strategy="A2", px=r2(c[i]), next_open=True, closeness=-8,
+                                  note=f"✅ Down {f['r5'] * 100:.1f}% in 5 days, still above its 200-day average — dip buy at the next open."))
         # ---- forming today / near misses (could fire in a day or two)
         if part:
             hi252 = max(h[-252:])
